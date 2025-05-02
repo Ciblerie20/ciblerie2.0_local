@@ -10,14 +10,23 @@ import 'package:web_socket_channel/html.dart';
 class WebSocketService with ChangeNotifier {
   WebSocketChannel? _channel;
   bool _isConnected = false;
-  List<Map<String, dynamic>> playerData = [
-    {'playerIndex': 0, 'score': 0},
-    {'playerIndex': 1, 'score': 0},
-    {'playerIndex': 2, 'score': 0},
-    {'playerIndex': 3, 'score': 0},
-  ];
+  Map<String, dynamic> currentPlayerData = {
+    'playerIndex': 0,
+    'score': 0,
+    'point': 0
+  }; // Données actuelles du joueur
+  bool _gameEnded = false; // Indicateur de fin de jeu
 
   bool get isConnected => _isConnected;
+  bool get gameEnded => _gameEnded;
+
+  // Liste des données des joueurs avec les "points" intégrés
+  List<Map<String, dynamic>> playerData = [
+    {'playerIndex': 0, 'score': 0, 'point': 0},
+    {'playerIndex': 1, 'score': 0, 'point': 0},
+    {'playerIndex': 2, 'score': 0, 'point': 0},
+    {'playerIndex': 3, 'score': 0, 'point': 0},
+  ];
 
   // Méthode de connexion qui s'adapte à la plateforme (Web ou non)
   void connect(String url) {
@@ -58,35 +67,52 @@ class WebSocketService with ChangeNotifier {
     notifyListeners();
   }
 
-  // Traitement des messages entrants
+  // Gestion des messages entrants
   void _handleIncomingMessage(dynamic message) {
     try {
       final decodedMessage = json.decode(message);
       if (decodedMessage is Map<String, dynamic> &&
           decodedMessage.containsKey('playerIndex') &&
-          decodedMessage.containsKey('score')) {
+          decodedMessage.containsKey('score') &&
+          decodedMessage.containsKey('point')) {
         final playerIndex = decodedMessage['playerIndex'] as int;
         final score = decodedMessage['score'] as int;
+        final point = decodedMessage['point'] as int;
         if (playerIndex >= 0 && playerIndex < playerData.length) {
           playerData[playerIndex]['score'] = score;
+          playerData[playerIndex]['point'] = point;
           notifyListeners();
         }
+      } else if (decodedMessage is String && decodedMessage == "FIN GAME") {
+        _gameEnded = true;
+        notifyListeners();
+        print('🔚 Fin de la partie reçue.');
       }
     } catch (error) {
       print('⚠️ Erreur lors du traitement du message WebSocket : $error');
     }
   }
 
-  // Réinitialisation locale des scores (appelée lors de la connexion)
+  // Méthode pour réinitialiser les scores et points localement
   void resetScores() {
     for (var player in playerData) {
       player['score'] = 0;
+      player['point'] = 0;
     }
+    _gameEnded = false;
     notifyListeners();
     print('🔄 Scores locaux réinitialisés.');
   }
 
-  // Envoi d'une commande de réinitialisation au serveur ESP32
+  // Méthode pour récupérer les données d’un joueur spécifique
+  Map<String, dynamic> getScoreForBox(int index) {
+    if (index >= 0 && index < playerData.length) {
+      return playerData[index];
+    }
+    return {'playerIndex': index, 'score': 0, 'point': 0};
+  }
+
+  // Méthode pour envoyer une commande de réinitialisation au serveur ESP32
   void sendResetCommand() {
     if (_channel != null) {
       final resetMessage = json.encode({'type': 'reset'});
@@ -97,11 +123,8 @@ class WebSocketService with ChangeNotifier {
     }
   }
 
-  // Récupération des données de score pour une boîte spécifique
-  Map<String, dynamic> getScoreForBox(int index) {
-    if (index >= 0 && index < playerData.length) {
-      return playerData[index];
-    }
-    return {'playerIndex': index, 'score': 0};
+  // Récupération des données actuelles du joueur
+  Map<String, dynamic> getCurrentPlayerData() {
+    return currentPlayerData;
   }
 }
