@@ -10,8 +10,6 @@ WebSocketsServer webSocket = WebSocketsServer(81);
 
 // Variables globales
 bool gameEnded = false;          // Indique si la partie est terminée
-int points[4] = {0, 0, 0, 0};    // Points des joueurs (J1, J2, J3, J4)
-int scores[4] = {0, 0, 0, 0};    // Scores cumulés des joueurs (J1, J2, J3, J4)
 
 // Configuration des broches RX1/TX1 pour la communication série
 #define RXD1 16
@@ -23,7 +21,6 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
 void processIncomingSerialData();
 void endGame();
 void resetGameState();
-int calculerScore(int point); // Fonction pour convertir les points en scores
 
 void setup() {
   Serial.begin(115200);
@@ -102,7 +99,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
     Serial.println("📨 Message reçu : " + message);
 
     if (message == "{\"type\":\"reset\"}") {
-      resetGameState(); // Remise à zéro des points et scores
+      resetGameState(); // Remise à zéro des points
       gameEnded = false; // Relance de la partie
       Serial.println("🚀 Nouvelle partie lancée après 'reset'");
     } else if (message == "{\"type\":\"stop\"}") {
@@ -121,18 +118,6 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
   }
 }
 
-// Fonction pour convertir les points en scores
-int calculerScore(int point) {
-  switch (point) {
-    case 5: return 5;
-    case 10: return 5;
-    case 15: return 10;
-    case 25: return 15;
-    case 50: return 25;
-    default: return 0;
-  }
-}
-
 // Traitement des données série reçues de l'Arduino Méga
 void processIncomingSerialData() {
   while (Serial1.available()) {
@@ -141,19 +126,16 @@ void processIncomingSerialData() {
 
     if (incomingData.startsWith("J")) { // Vérifie si le format est correct pour un joueur
       int playerIndex = incomingData.substring(1, 2).toInt() - 1; // Extrait l'index du joueur
-      int point = incomingData.substring(4).toInt(); // Extrait le point
+      String pointAndScore = incomingData.substring(4); // Extrait le point et le score sous forme de chaîne
 
       if (playerIndex >= 0 && playerIndex < 4) {
-        points[playerIndex] = point; // Met à jour le point
-        scores[playerIndex] += calculerScore(point); // Met à jour le score cumulé
-
         // Affichage dans le moniteur série
-        Serial.printf("📥 Reçu : J%d : %d : %d\n", playerIndex + 1, point, scores[playerIndex]);
+        Serial.printf("📥 Reçu : J%d : %s\n", playerIndex + 1, pointAndScore.c_str());
 
         // Envoi immédiat des données via WebSocket
         String jsonMessage = "{\"playerIndex\": " + String(playerIndex) +
-                             ", \"point\": " + String(point) +
-                             ", \"score\": " + String(scores[playerIndex]) + "}";
+                             ", \"point\": " + pointAndScore.substring(0, pointAndScore.indexOf(':')) +
+                             ", \"score\": " + pointAndScore.substring(pointAndScore.indexOf(':') + 1) + "}";
         webSocket.broadcastTXT(jsonMessage);
         Serial.println("📤 Données envoyées : " + jsonMessage);
       } else {
@@ -176,12 +158,8 @@ void endGame() {
   gameEnded = true;
 }
 
-// Réinitialisation des points et scores pour une nouvelle partie
+// Réinitialisation des points pour une nouvelle partie
 void resetGameState() {
-  for (int i = 0; i < 4; i++) {
-    points[i] = 0;
-    scores[i] = 0;
-  }
   gameEnded = false;
   Serial.println("🔄 État du jeu réinitialisé.");
 }
