@@ -6,8 +6,6 @@ class StatsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final historyService = Provider.of<ScoreHistoryService>(context);
-    // On suppose que history est une List<List<int>>
-    // Chaque partie est une liste de 4 scores (pour J1, J2, J3, J4)
     final List<List<int>> history = historyService.history;
 
     // Calcul des statistiques pour chacun des 4 joueurs.
@@ -16,6 +14,15 @@ class StatsScreen extends StatelessWidget {
       int total = scores.fold(0, (prev, curr) => prev + curr);
       double average = scores.isNotEmpty ? total / scores.length : 0.0;
       int best = scores.isNotEmpty ? scores.reduce((a, b) => a > b ? a : b) : 0;
+
+      // Calcul du nombre de fois que chaque score prédéfini a été touché.
+      Map<int, int> scoreFrequency = {5: 0, 10: 0, 15: 0, 25: 0, 50: 0};
+      for (int score in scores) {
+        if (scoreFrequency.containsKey(score)) {
+          scoreFrequency[score] = scoreFrequency[score]! + 1;
+        }
+      }
+
       return {
         'joueur': 'J${index + 1}',
         'parties': scores.length,
@@ -23,6 +30,7 @@ class StatsScreen extends StatelessWidget {
         'moyenne': average.toStringAsFixed(2),
         'meilleur': best,
         'scores': scores,
+        'frequency': scoreFrequency,
       };
     });
 
@@ -40,10 +48,8 @@ class StatsScreen extends StatelessWidget {
           ),
         ],
       ),
-      // On utilise ici un Row avec 4 Expanded pour que chaque colonne occupe 1/4 de la largeur disponible.
       body: Padding(
         padding: const EdgeInsets.all(16.0),
-        // Le Row est lui-même contenu dans un SingleChildScrollView vertical si besoin.
         child: SingleChildScrollView(
           child: Row(
             children: List.generate(4, (index) {
@@ -61,7 +67,6 @@ class StatsScreen extends StatelessWidget {
     );
   }
 
-  // Ce widget construit la carte d'un joueur.
   Widget _buildPlayerCard(BuildContext context, int playerIndex,
       Map<String, dynamic> stat, ScoreHistoryService historyService) {
     return Card(
@@ -71,7 +76,6 @@ class StatsScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // En-tête : le nom du joueur et le bouton "Reset" sur la même ligne.
             Row(
               children: [
                 Expanded(
@@ -102,24 +106,38 @@ class StatsScreen extends StatelessWidget {
               ],
             ),
             SizedBox(height: 8),
-            // Affichage des statistiques globales.
             Text("Parties jouées : ${stat['parties']}"),
             Text("Score total : ${stat['total']}"),
             Text("Moyenne : ${stat['moyenne']}"),
             Text("Meilleur score : ${stat['meilleur']}"),
             SizedBox(height: 8),
             Text(
+              "Tableau des fréquences :",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 4),
+            // Ajout du tableau dynamique ici.
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: (stat['frequency'] as Map<int, int>).entries.map((entry) {
+                return Padding(
+                  padding: EdgeInsets.symmetric(vertical: 2),
+                  child: Text(" ${entry.key} points : ${entry.value} "),
+                );
+              }).toList(),
+            ),
+            SizedBox(height: 8),
+            Text(
               "Scores enregistrés :",
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 4),
-            // Liste verticale des scores enregistrés.
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: (stat['scores'] as List<int>).map((score) {
                 return Padding(
                   padding: EdgeInsets.symmetric(vertical: 2),
-                  child: Text("- $score"),
+                  child: Text(" $score"),
                 );
               }).toList(),
             ),
