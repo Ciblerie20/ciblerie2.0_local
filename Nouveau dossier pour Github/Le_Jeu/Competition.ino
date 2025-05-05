@@ -1,7 +1,7 @@
 
 void CPT(){ //------------------------------------------------------------------------------------
   Serial.println(F("CPT"));
-  indexgroupe = 7;  // Toujours revenir au groupe MS avant le début de chaque partie
+  indexgroupe = 8;  // Toujours revenir au groupe CPT avant le début de chaque partie
   AcquisitionCapteurs();
   if (initialisation==true){InitGameCPT();}     
   if (partieEnCours==true){trtPartieEnCoursCPT();} 
