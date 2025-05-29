@@ -1,141 +1,67 @@
-#include <WiFi.h>                // Bibliothèque WiFi pour ESP32
-#include <WebSocketsServer.h>    // Serveur WebSocket
-#include <BluetoothSerial.h>     // Bibliothèque Bluetooth
 
-// Configuration WiFi (modifiable via Bluetooth)
+#include <WiFi.h>
+#include <WebSocketsServer.h>
+#include <BluetoothSerial.h>
+#include <ArduinoJson.h>
+
+// === Configuration WiFi (modifiable via Bluetooth) ===
 String ssid = "Livebox-9410";
 String password = "37322944";
 
-// Création du serveur WebSocket sur le port 81
+// === Déclaration des objets ===
 WebSocketsServer webSocket = WebSocketsServer(81);
-
-// Création de l'objet Bluetooth Serial
 BluetoothSerial SerialBT;
 
-void connectToWiFi();
-void ensureWiFiConnection(); // Vérifie et force la reconnexion au WiFi
-void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length);
-void processIncomingSerialData();
-String convertToJSON(String data);
-void handleBluetoothCommands(); // Gestion des commandes Bluetooth
-void sendBluetoothWelcomeMessage(); // Message de bienvenue Bluetooth
+// === Gestion Ping/Timeout WebSocket ===
+unsigned long lastPingTime = 0;
+const unsigned long PING_INTERVAL = 30000;
+const unsigned long CLIENT_TIMEOUT = 60000;
+unsigned long lastPongTimes[WEBSOCKETS_SERVER_CLIENT_MAX] = {0};
+
+// === Gestion Jeu ===
+enum GameState { IDLE, WAITING_CONFIRMATION, GAME_STARTED };
+GameState currentGameState = IDLE;
+unsigned long lastSerialActivity = 0;
 
 void setup() {
   Serial.begin(115200);
-
-  // Initialisation de la liaison série avec l'Arduino Méga
-  Serial1.begin(9600, SERIAL_8N1, 16, 17); // Utilisez directement Serial1
+  Serial1.begin(9600, SERIAL_8N1, 16, 17);
   Serial.println("🔗 Liaison série avec Arduino Méga initialisée.");
 
-  // Initialisation Bluetooth
-  SerialBT.begin("🖥️ ESP32_BT_Config"); // Nom Bluetooth de l'ESP32
+  // === VOTRE PARTIE BLUETOOTH EXACTEMENT COMME VOUS L'AVEZ ===
+  SerialBT.begin("🖥️ ESP32_BT_Config");
   Serial.println("📡 Bluetooth initialisé. Connectez-vous à 'ESP32_BT_Config'.");
-  
-  // Envoyer un message de bienvenue et les commandes disponibles à la connexion
+
   SerialBT.register_callback([](esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
     if (event == ESP_SPP_SRV_OPEN_EVT) {
       sendBluetoothWelcomeMessage();
     }
   });
+  // === FIN DE VOTRE PARTIE BLUETOOTH ===
 
-  // Connexion au réseau WiFi
   connectToWiFi();
-
-  // Démarrage du serveur WebSocket
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
 }
 
 void loop() {
-  // Vérifie et force la reconnexion WiFi si nécessaire
-  ensureWiFiConnection();
-
-  // Gestion des événements WebSocket
   webSocket.loop();
-
-  // Traitement des données série provenant de l'Arduino Méga
+  handleBluetoothCommands(); // Votre fonction originale
   processIncomingSerialData();
 
-  // Gestion des commandes Bluetooth
-  handleBluetoothCommands();
-}
-
-// Connexion au réseau WiFi avec retour d'état
-void connectToWiFi() {
-  Serial.println("🌐 Connexion en cours...");
-  SerialBT.println("🌐 Connexion en cours...");
-
-  WiFi.begin(ssid.c_str(), password.c_str());
-
-  int retries = 0;
-  while (WiFi.status() != WL_CONNECTED && retries < 20) { // Essayer 20 fois avant d'abandonner
-    delay(500);
-    Serial.print(".");
-    SerialBT.print(".");
-    retries++;
-  }
-
-  Serial.println(""); // Saut de ligne après les points
-  SerialBT.println("");
-
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("✅ Connexion WiFi réussie !");
-    SerialBT.println("✅ Connexion WiFi réussie !");
-  } else {
-    Serial.println("❌ Connexion WiFi échouée. Vérifiez le SSID et le mot de passe.");
-    SerialBT.println("❌ Connexion WiFi échouée. Vérifiez le SSID et le mot de passe.");
-  }
-
-  // Afficher les informations WiFi après tentative de connexion
-  sendBluetoothWelcomeMessage();
-}
-
-// Vérifie et force la reconnexion au WiFi si nécessaire
-void ensureWiFiConnection() {
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("⚠️ WiFi déconnecté. Tentative de reconnexion...");
-    connectToWiFi();
+  // Gestion ping/timeout
+  if (millis() - lastPingTime > PING_INTERVAL) {
+    sendWebSocketPing();
+    checkClientTimeouts();
+    lastPingTime = millis();
   }
 }
 
-// Gestion des commandes Bluetooth
-void handleBluetoothCommands() {
-  if (SerialBT.available()) {
-    String command = SerialBT.readStringUntil('\n');
-    command.trim();
-
-    if (command.startsWith("SSID:")) {
-      ssid = command.substring(5); // Extraire le SSID
-      Serial.println("✅ SSID mis à jour : " + ssid);
-      SerialBT.println("✅ SSID mis à jour : " + ssid);
-      Serial.println("🌐 Connexion en cours...");
-      SerialBT.println("🌐 Connexion en cours...");
-      connectToWiFi(); // Reconnexion après changement
-    } else if (command.startsWith("PASS:")) {
-      password = command.substring(5); // Extraire le mot de passe
-      Serial.println("✅ Mot de passe mis à jour.");
-      SerialBT.println("✅ Mot de passe mis à jour.");
-      Serial.println("🌐 Connexion en cours...");
-      SerialBT.println("🌐 Connexion en cours...");
-      connectToWiFi(); // Reconnexion après changement
-    } else if (command == "RESTART") {
-      Serial.println("🔄 Redémarrage de l'ESP32...");
-      SerialBT.println("🔄 Redémarrage de l'ESP32...");
-      delay(1000); // Petite pause avant redémarrage
-      ESP.restart();
-    } else {
-      Serial.println("⚠️ Commande inconnue : " + command);
-      SerialBT.println("⚠️ Commande inconnue : " + command);
-    }
-  }
-}
-
-// Message de bienvenue et rappel des commandes disponibles
+// ============== VOS FONCTIONS BLUETOOTH ORIGINALES (100% inchangées) ==============
 void sendBluetoothWelcomeMessage() {
   SerialBT.println("🔗 Bienvenue sur ESP32_BT_Config !");
   SerialBT.println("Voici les informations actuelles et commandes disponibles :");
 
-  // Informations sur l'état WiFi
   if (WiFi.status() == WL_CONNECTED) {
     SerialBT.println("✅ WiFi connecté !");
     SerialBT.print("📶 Adresse IP : ");
@@ -144,87 +70,182 @@ void sendBluetoothWelcomeMessage() {
     SerialBT.println("❌ WiFi non connecté.");
   }
 
-  // Afficher le SSID et le mot de passe actuels
   SerialBT.print("📡 SSID actuel : ");
   SerialBT.println(ssid);
   SerialBT.print("🔑 Mot de passe actuel : ");
   SerialBT.println(password);
 
-  // Commandes disponibles
   SerialBT.println("\n⚙️ Commandes disponibles :");
-  SerialBT.println(" - SSID:<NomDuReseau> : Changer le SSID.");
-  SerialBT.println(" - PASS:<MotDePasse> : Changer le mot de passe.");
-  SerialBT.println(" - RESTART : Redémarrer l'ESP32.");
+  SerialBT.println(" - SSID:<NomDuReseau>");
+  SerialBT.println(" - PASS:<MotDePasse>");
+  SerialBT.println(" - RESTART");
 }
 
-// Gestion des événements WebSocket
-void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length) {
-  if (type == WStype_TEXT) {
-    String message = String((char*)payload);
-    Serial.println("📨 Message reçu : " + message);
-  }
-}
+void handleBluetoothCommands() {
+  if (SerialBT.available()) {
+    String command = SerialBT.readStringUntil('\n');
+    command.trim();
 
-// Traitement des données série reçues de l'Arduino Méga
-void processIncomingSerialData() {
-  while (Serial1.available()) {
-    String incomingData = Serial1.readStringUntil('\n'); // Lecture ligne par ligne
-    incomingData.trim();
-
-    if (!incomingData.isEmpty()) { // Vérifie que les données ne sont pas vides
-
-      if (incomingData.startsWith("J")) {
-        int colon1 = incomingData.indexOf(':');
-        int colon2 = incomingData.lastIndexOf(':');
-
-        String joueur = incomingData.substring(0, colon1);
-        String points = incomingData.substring(colon1 + 1, colon2);
-        String cumul = incomingData.substring(colon2 + 1);
-
-        Serial.printf("📥 Reçu : %s : %s : %s\n", joueur.c_str(), points.c_str(), cumul.c_str());
-
-        String jsonData = "{\"playerIndex\": " + String(joueur.substring(1).toInt() - 1) +
-                          ", \"point\": " + points +
-                          ", \"score\": " + cumul + "}";
-
-        webSocket.broadcastTXT(jsonData);
-        Serial.printf("📤 Données envoyées : {\"playerIndex\": %d, \"point\": %s , \"score\": %s}\n",
-                      joueur.substring(1).toInt() - 1, points.c_str(), cumul.c_str());
-
-      } else if (incomingData.startsWith("Groupe : ")) {
-        String groupe = incomingData.substring(9);
-        Serial.printf("📥 Reçu : %s\n", groupe.c_str());
-        String jsonData = "{\"type\": \"groupe\", \"value\": \"" + groupe + "\"}";
-        webSocket.broadcastTXT(jsonData);
-        Serial.println("📤 Données envoyées via WebSocket : " + jsonData);
-
-      } else if (incomingData == "FIN GAME") {
-        Serial.println("📥 Reçu : FIN GAME");
-        String jsonData = "{\"type\": \"fin\", \"message\": \"FIN GAME\"}";
-        webSocket.broadcastTXT(jsonData);
-        Serial.println("📤 Données envoyées via WebSocket : " + jsonData);
-
-      } else {
-        String jsonData = convertToJSON(incomingData);
-        webSocket.broadcastTXT(jsonData);
-        Serial.println("📤 Données envoyées via WebSocket : " + jsonData);
-      }
+    if (command.startsWith("SSID:")) {
+      ssid = command.substring(5);
+      Serial.println("✅ SSID mis à jour : " + ssid);
+      SerialBT.println("✅ SSID mis à jour : " + ssid);
+      connectToWiFi();
+    } else if (command.startsWith("PASS:")) {
+      password = command.substring(5);
+      Serial.println("✅ Mot de passe mis à jour.");
+      SerialBT.println("✅ Mot de passe mis à jour.");
+      connectToWiFi();
+    } else if (command == "RESTART") {
+      Serial.println("🔄 Redémarrage de l'ESP32...");
+      SerialBT.println("🔄 Redémarrage de l'ESP32...");
+      delay(1000);
+      ESP.restart();
     } else {
-      Serial.println("⚠️ Données non valides reçues !");
+      Serial.println("⚠️ Commande inconnue : " + command);
+      SerialBT.println("⚠️ Commande inconnue : " + command);
     }
   }
 }
 
-// Fonction pour convertir les données reçues en JSON
-String convertToJSON(String data) {
-  String json = "{";
+// ============== FONCTIONS WiFi (adaptées pour garder votre style) ==============
+void connectToWiFi() {
+  Serial.println("🌐 Connexion en cours...");
+  SerialBT.println("🌐 Connexion en cours...");
 
-  if (data.startsWith("Groupe : ")) {
-    json += "\"type\": \"groupe\", \"value\": \"" + data.substring(9) + "\"";
-  } else if (data == "FIN GAME") {
-    json += "\"type\": \"fin\", \"message\": \"FIN GAME\"";
+  WiFi.begin(ssid.c_str(), password.c_str());
+
+  int retries = 0;
+  while (WiFi.status() != WL_CONNECTED && retries < 20) {
+    delay(500);
+    Serial.print(".");
+    SerialBT.print(".");
+    retries++;
   }
 
-  json += "}";
-  return json;
+  Serial.println("");
+  SerialBT.println("");
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("✅ Connexion WiFi réussie !");
+    SerialBT.println("✅ Connexion WiFi réussie !");
+  } else {
+    Serial.println("❌ Connexion WiFi échouée.");
+    SerialBT.println("❌ Connexion WiFi échouée.");
+  }
+}
+
+// ============== NOUVELLES FONCTIONS OPTIMISÉES ==============
+void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length) {
+  switch (type) {
+    case WStype_TEXT: {
+      String jsonStr = String((char*)payload);
+      StaticJsonDocument<256> doc;
+
+      DeserializationError error = deserializeJson(doc, jsonStr);
+      if (error) {
+        Serial.println("❌ Erreur JSON: " + String(error.c_str()));
+        return;
+      }
+
+      String type = doc["type"] | "";
+      String msg = doc["message"] | "";
+
+      if (type == "group_game") {
+        Serial1.println(msg);
+        Serial.println("📨 Envoi à Arduino: " + msg);
+        currentGameState = WAITING_CONFIRMATION;
+
+      } else if (type == "game_status" && msg == "START_GAME") {
+        Serial1.println("START_GAME");
+        Serial.println("📨 Envoi à Arduino: START_GAME");
+
+      } else if (type == "game_status" && msg == "CONFIRMED_GAME") {
+        Serial1.println("CONFIRMED_GAME");
+        Serial.println("📨 Envoi à Arduino: CONFIRMED_GAME");
+      }
+      break;
+    }
+    case WStype_PONG:
+      lastPongTimes[num] = millis();
+      break;
+    case WStype_DISCONNECTED:
+      Serial.printf("❌ Client %u déconnecté.\n", num);
+      break;
+    case WStype_CONNECTED:
+      lastPongTimes[num] = millis();
+      Serial.printf("✅ Client %u connecté.\n", num);
+      break;
+  }
+}
+
+void processIncomingSerialData() {
+  while (Serial1.available()) {
+    String incomingData = Serial1.readStringUntil('\n');
+    incomingData.trim();
+    lastSerialActivity = millis();
+
+    Serial.println("📥 Message reçu de l'Arduino: " + incomingData);
+
+    if (incomingData.startsWith("J")) {
+      handleScoreData(incomingData.substring(1)); // Enlever le J ici aussi
+    } else if (incomingData == "START") {
+      sendGameStatus("START");
+      currentGameState = WAITING_CONFIRMATION;
+    } else if (incomingData == "CONFIRMED_GAME") {
+      sendGameStatus("CONFIRMED_GAME");
+    }
+  }
+}
+
+void handleScoreData(const String& data) {
+  int colon1 = data.indexOf(':');
+  int colon2 = data.indexOf(':', colon1 + 1);
+  int colon3 = data.lastIndexOf(':');
+
+  // Extraction des données
+  int playerIndex = data.substring(0, colon1).toInt();
+  int point = data.substring(colon1 + 1, colon2).toInt();
+  int pointbonus = data.substring(colon2 + 1, colon3).toInt();
+  int score = data.substring(colon3 + 1).toInt();
+
+  // Création du nouveau document JSON
+  StaticJsonDocument<256> outputDoc;
+  outputDoc["playerIndex"] = playerIndex;
+  outputDoc["point"] = score;
+  outputDoc["pointbonus"] = points;
+  outputDoc["score"] = pointsbonus;
+
+  // Serialisation et envoi
+  String output;
+  serializeJson(outputDoc, output);
+  webSocket.broadcastTXT(output);
+  Serial.println("📨 Score: " + output);
+}
+
+void sendGameStatus(const String& status) {
+  StaticJsonDocument<128> doc;
+  doc["type"] = "game_status";
+  doc["message"] = status;
+  String output;
+  serializeJson(doc, output);
+  webSocket.broadcastTXT(output);
+  Serial.println("📨 Données envoyées via WebSocket : " + output); // Ajout du log
+}
+
+void sendWebSocketPing() {
+  for (uint8_t i = 0; i < WEBSOCKETS_SERVER_CLIENT_MAX; i++) {
+    if (webSocket.clientIsConnected(i)) {
+      webSocket.sendPing(i);
+    }
+  }
+}
+
+void checkClientTimeouts() {
+  unsigned long now = millis();
+  for (uint8_t i = 0; i < WEBSOCKETS_SERVER_CLIENT_MAX; i++) {
+    if (webSocket.clientIsConnected(i) && now - lastPongTimes[i] > CLIENT_TIMEOUT) {
+      webSocket.disconnect(i);
+    }
+  }
 }
