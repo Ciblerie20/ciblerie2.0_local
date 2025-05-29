@@ -6,9 +6,6 @@ void CF1(){ //------------------------------------------------------------------
   Serial1.println("START_GAME");
   Serial.println("📨 Envoyer de CF1 à ESP32: START_GAME");
 
-  Serial1.println("CONFIRMED_GAME");
-  Serial.println("📨 Envoi de CF1 à ESP32: CONFIRMED_GAME");
-
   indexgroupe = 0;  // Toujours revenir au groupe F avant le début de chaque partie
   AcquisitionCapteurs();
   if (initialisation==true){InitGame();}   
@@ -28,6 +25,7 @@ void trtPartieFinie(){
             joueurEnCours = i;
           }
         } 
+        delay(1); // Ajout d'un délai minimal
     }
   partieFinie = false;
   partieEnCours = false;
@@ -42,16 +40,41 @@ void trtPartieEnCours() {
     FastLED.clear(); FastLED.show();
     Temporisation();
     EcranEnJeu();
-    while (statusCible1==HIGH && statusCible2==HIGH && statusCible3==HIGH && statusCible4==HIGH && statusCible5==HIGH && statusCible6==HIGH && statusCible7==HIGH && statusCible8==HIGH && statusCible9==HIGH && statusCible10==HIGH ){
+
+    // Lecture de l'état des capteurs AVANT d'entrer dans la boucle
+    bool capteur1Etat = digitalRead(cible1) == HIGH;
+    bool capteur2Etat = digitalRead(cible2) == HIGH;
+    bool capteur3Etat = digitalRead(cible3) == HIGH;
+    bool capteur4Etat = digitalRead(cible4) == HIGH;
+    bool capteur5Etat = digitalRead(cible5) == HIGH;
+    bool capteur6Etat = digitalRead(cible6) == HIGH;
+    bool capteur7Etat = digitalRead(cible7) == HIGH;
+    bool capteur8Etat = digitalRead(cible8) == HIGH;
+    bool capteur9Etat = digitalRead(cible9) == HIGH;
+    bool capteur10Etat = digitalRead(cible10) == HIGH;
+
+    while (capteur1Etat && capteur2Etat && capteur3Etat && capteur4Etat && capteur5Etat && capteur6Etat && capteur7Etat && capteur8Etat && capteur9Etat && capteur10Etat) {
       AcquisitionCapteurs();    
       Penalite();     
       if (partieFinie==true){
-        delay(0); 
         break;
         }
       else {      
           killer[joueurEnCours] = 0;
-      }        
+      }
+      delay(1); // Ajout d'un délai minimal
+
+      // Relecture de l'état des capteurs à chaque itération
+      capteur1Etat = digitalRead(cible1) == HIGH;
+      capteur2Etat = digitalRead(cible2) == HIGH;
+      capteur3Etat = digitalRead(cible3) == HIGH;
+      capteur4Etat = digitalRead(cible4) == HIGH;
+      capteur5Etat = digitalRead(cible5) == HIGH;
+      capteur6Etat = digitalRead(cible6) == HIGH;
+      capteur7Etat = digitalRead(cible7) == HIGH;
+      capteur8Etat = digitalRead(cible8) == HIGH;
+      capteur9Etat = digitalRead(cible9) == HIGH;
+      capteur10Etat = digitalRead(cible10) == HIGH;
     }
     
     statusCible1 = digitalRead(cible1);
@@ -299,7 +322,6 @@ void Penalite() {
 
 void GererInterruption(){
   Serial.println("GererInterruption - Debut");
-//  noInterrupts();
 
   Serial.print("joueurEnCours: "); Serial.println(joueurEnCours);
   Serial.print("tourEnCours: "); Serial.println(tourEnCours);
@@ -329,7 +351,10 @@ void GererInterruption(){
     myDFPlayer.playMp3Folder(30);   
     EcranJoueurSuivant();  
     lcd.clear();
-   while (statusBoutonE==HIGH){
+
+   // Lecture de l'état du bouton E AVANT d'entrer dans la boucle
+   bool boutonEEtat = digitalRead(boutonE) == HIGH;
+   while (boutonEEtat){
         AcquisitionCapteurs();        
         printBigNum(21, 13, 0);
         printBigNum(joueurEnCours,17,0);
@@ -339,7 +364,12 @@ void GererInterruption(){
         lcd.print("Quand pret");         
         lcd.setCursor(8,3);
         lcd.print("Start --> OK");
-        FastLED.clear(); FastLED.show();                   
+        FastLED.clear(); FastLED.show();
+
+        delay(1); // Ajout d'un délai minimal
+
+        // Relecture de l'état du bouton E à chaque itération
+        boutonEEtat = digitalRead(boutonE) == HIGH;                   
    }
    EcranGo();
    Serial.println("GO_TS");                   
@@ -358,7 +388,10 @@ void GererInterruption(){
     myDFPlayer.playMp3Folder(30);
     myDFPlayer.playMp3Folder(23);   
     lcd.clear();
-   while (statusBoutonE==HIGH){
+
+    // Lecture de l'état du bouton E AVANT d'entrer dans la boucle
+    bool boutonEEtat = digitalRead(boutonE) == HIGH;
+    while (boutonEEtat){
         AcquisitionCapteurs();             
         printBigNum(21, 13, 0);
         printBigNum(joueurEnCours,17,0);
@@ -368,13 +401,17 @@ void GererInterruption(){
         lcd.print("Quand pret");        
         lcd.setCursor(8,3);
         lcd.print("Start --> OK");
-        FastLED.clear(); FastLED.show();                        
+        FastLED.clear(); FastLED.show();
+
+        delay(1); // Ajout d'un délai minimal
+
+        // Relecture de l'état du bouton E à chaque itération
+        boutonEEtat = digitalRead(boutonE) == HIGH;                        
    }
    EcranGo();
    Serial.println("GO_JS");    
   }
   Serial.println("GererInterruption - Fin");
-//  interrupts();  
 }
 
 void EcranInitialisation(){
