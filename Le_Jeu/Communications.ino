@@ -1,4 +1,5 @@
 
+// 📨 📥
 void communications() {
   if (Serial1.available() > 0) {
     String messageLu = Serial1.readStringUntil('\n');
@@ -18,7 +19,10 @@ void communications() {
       Serial.println(groupeSelectionne);
       Serial.print("Groupe enregistré : ");
       Serial.println(groupeSelectionne);
-      envoyerMessage("START"); // Envoyer "START" pour activer le bouton "Attente groupe"
+      //envoyerMessage("START"); // Envoyer "START" pour activer le bouton "Attente groupe"
+      Serial1.println("START"); // Envoyer "START" pour activer le bouton "Attente groupe"
+      Serial.print("📨 Message envoyé à ESP32 : ");
+      Serial.println("START"); // Log d'envoi
     } else if (strcmp(messageRecu, "START_GAME") == 0 && !partieDemarree) {
       Serial.println("Message reçu : START_GAME");
       Serial.print("Partie démarrée avec le groupe : ");
@@ -89,17 +93,22 @@ void communications() {
       groupeSelectionne = ""; // Réinitialiser la variable groupeSelectionne
     } else if (strcmp(messageRecu, "CONFIRMED_GAME") == 0 && partieDemarree) {
       Serial.println("Message reçu : CONFIRMED_GAME");
-      envoyerMessage("CONFIRMED_GAME");
+      //envoyerMessage("CONFIRMED_GAME");
+      Serial1.println("CONFIRMED_GAME");
+       Serial.print("📨 Message envoyé à ESP32 : ");
+      Serial.println("CONFIRMED_GAME");
     } else if (strcmp(messageRecu, "NEXT_PLAYER") == 0 && partieDemarree) {
       Serial.println("Message reçu : NEXT_PLAYER");
-      // Mettre à jour la variable joueurEnCours ici
-      // Par exemple : joueurEnCours++;
-      envoyerMessage("GO");
+      //envoyerMessage("GO");
+      Serial1.println("GO");
+       Serial.print("📨 Message envoyé à ESP32 : ");
+      Serial.println("GO");
     } else if (strcmp(messageRecu, "NEXT_TURN") == 0 && partieDemarree) {
       Serial.println("Message reçu : NEXT_TURN");
-      // Mettre à jour la variable tourEnCours ici
-      // Par exemple : tourEnCours++;
-      envoyerMessage("GO");
+      //envoyerMessage("GO");
+      Serial1.println("GO");
+       Serial.print("📨 Message envoyé à ESP32 : ");
+      Serial.println("GO");
     } else if (strcmp(messageRecu, "FIN_GAME") == 0 && partieDemarree) {
       Serial.println("Message reçu : FIN_GAME");
       // Actions de fin de partie
