@@ -160,9 +160,6 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
         Serial1.println("START_GAME");
         Serial.println("📨 Envoi à Arduino: START_GAME");
 
-      } else if (type == "game_status" && msg == "CONFIRMED_GAME") {
-        Serial1.println("CONFIRMED_GAME");
-        Serial.println("📨 Envoi à Arduino: CONFIRMED_GAME");
       }
       break;
     }
@@ -192,8 +189,6 @@ void processIncomingSerialData() {
     } else if (incomingData == "START") {
       sendGameStatus("START");
       currentGameState = WAITING_CONFIRMATION;
-    } else if (incomingData == "CONFIRMED_GAME") {
-      sendGameStatus("CONFIRMED_GAME");
     }
   }
 }
@@ -205,16 +200,16 @@ void handleScoreData(const String& data) {
 
   // Extraction des données
   int playerIndex = data.substring(0, colon1).toInt();
-  int point = data.substring(colon1 + 1, colon2).toInt();
-  int pointbonus = data.substring(colon2 + 1, colon3).toInt();
+  int points = data.substring(colon1 + 1, colon2).toInt();
+  int pointsbonus = data.substring(colon2 + 1, colon3).toInt();
   int score = data.substring(colon3 + 1).toInt();
 
   // Création du nouveau document JSON
   StaticJsonDocument<256> outputDoc;
-  outputDoc["playerIndex"] = playerIndex;
-  outputDoc["point"] = score;
-  outputDoc["pointbonus"] = points;
-  outputDoc["score"] = pointsbonus;
+  outputDoc["playerIndex"] = playerIndex -1;
+  outputDoc["points"] = points;
+  outputDoc["pointsbonus"] = pointsbonus;
+  outputDoc["score"] = score;
 
   // Serialisation et envoi
   String output;
