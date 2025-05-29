@@ -299,7 +299,7 @@ void Penalite() {
 
 void GererInterruption(){
   Serial.println("GererInterruption - Debut");
-  noInterrupts();
+//  noInterrupts();
 
   Serial.print("joueurEnCours: "); Serial.println(joueurEnCours);
   Serial.print("tourEnCours: "); Serial.println(tourEnCours);
@@ -341,7 +341,8 @@ void GererInterruption(){
         lcd.print("Start --> OK");
         FastLED.clear(); FastLED.show();                   
    }
-   EcranGo();                    
+   EcranGo();
+   Serial.println("GO_TS");                   
   }
   else if ( resteEnCours != 1 ){
     Serial.println("GererInterruption - Reste en cours");
@@ -369,10 +370,11 @@ void GererInterruption(){
         lcd.print("Start --> OK");
         FastLED.clear(); FastLED.show();                        
    }
-   EcranGo();    
+   EcranGo();
+   Serial.println("GO_JS");    
   }
   Serial.println("GererInterruption - Fin");
-  interrupts();  
+//  interrupts();  
 }
 
 void EcranInitialisation(){
@@ -408,6 +410,7 @@ void InitGame(){
     partieEnCours = true;
     EcranEnJeu();
     EcranGo();
+    Serial.println("GO_Partie");
 //    Serial1.println("GO");
 //    Serial.println("📤 Envoi à ESP32: GO");
 }
