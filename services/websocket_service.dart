@@ -124,13 +124,6 @@ class WebSocketService with ChangeNotifier {
     }
   }
 
-  void _handlePongMessage(Map<String, dynamic> data) {
-    final playerIndex = data['player'] as int?;
-    if (playerIndex != null && playerIndex >= 0 && playerIndex < 4) {
-      lastPongTimes[playerIndex] = DateTime.now().millisecondsSinceEpoch;
-    }
-  }
-
   // === Gestion des Messages ===
   void _handleIncomingMessage(String data) {
     try {
@@ -147,10 +140,6 @@ class WebSocketService with ChangeNotifier {
       } else if (decoded.containsKey('type') && decoded['type'] == 'game_status') {
         final message = decoded['message'] as String?;
         _handleGameStatus(message);
-      }
-      // Ajout de la gestion des messages game_info
-      else if (decoded.containsKey('type') && decoded['type'] == 'game_info') {
-        _handleGameInfo(decoded);
       }
       else {
         debugPrint('⚠️ Unrecognized message format: $data');
@@ -207,16 +196,10 @@ class WebSocketService with ChangeNotifier {
     }
   }
 
-  // Ajout de la fonction _handleGameInfo
-  void _handleGameInfo(Map<String, dynamic> data) {
-    try {
-      final joueurEnCours = data['joueurEnCours'] as int;
-      final tourEnCours = data['tourEnCours'] as int;
-
-      debugPrint('🎮 Info jeu reçue: joueur=$joueurEnCours, tour=$tourEnCours');
-      notifyListeners(); // Notifie les listeners pour mettre à jour l'UI
-    } catch (e) {
-      debugPrint('❌ Erreur traitement info jeu: $e');
+  void _handlePongMessage(Map<String, dynamic> data) {
+    final playerIndex = data['player'] as int?;
+    if (playerIndex != null && playerIndex >= 0 && playerIndex < 4) {
+      lastPongTimes[playerIndex] = DateTime.now().millisecondsSinceEpoch;
     }
   }
 
