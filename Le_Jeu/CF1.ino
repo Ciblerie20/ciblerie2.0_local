@@ -1,6 +1,14 @@
 
-void CF1(){ //------------------------------------------------------------------------------------ 
+void CF1(){ //------------------------------------------------------------------------------------
   Serial.println(F("CF1"));
+  Serial.println(F("CF1 , Ok pour le lancement du jeu"));
+
+  Serial1.println("START_GAME");
+  Serial.println("📨 Envoyer de CF1 à ESP32: START_GAME");
+
+  Serial1.println("CONFIRMED_GAME");
+  Serial.println("📨 Envoi de CF1 à ESP32: CONFIRMED_GAME");
+
   indexgroupe = 0;  // Toujours revenir au groupe F avant le début de chaque partie
   AcquisitionCapteurs();
   if (initialisation==true){InitGame();}   
@@ -10,7 +18,9 @@ void CF1(){ //------------------------------------------------------------------
 //---------------------------------------------FIN LOOP-------------------------------
 
 void trtPartieFinie(){  
-    FinGame();   
+    FinGame();
+  Serial1.println("FIN_GAME");
+  Serial.println("📤 Envoi à ESP32: FIN_GAME"); 
     while(killer[1]==1 || killer[2]==1 || killer[3]==1 || killer[4]==1 ){
       Serial.println("KILLER STATUS J1 " + String(killer[1]) + String(killer[2]) + String(killer[3]) + String(killer[4]));   
         for (int i = 1; i <= nbJoueurs ; i++){
@@ -24,11 +34,11 @@ void trtPartieFinie(){
   initialisation = true;
   oldNbJoueurs = 0;
   triclassement();
-  BaseScoresFin();
+  AfficheFin();
 }  
 // ---------------------------------FIN trtPartieFinie ----------------------------------
-    
-void trtPartieEnCours(){
+
+void trtPartieEnCours() {
     FastLED.clear(); FastLED.show();
     Temporisation();
     EcranEnJeu();
@@ -43,130 +53,162 @@ void trtPartieEnCours(){
           killer[joueurEnCours] = 0;
       }        
     }
+    
     statusCible1 = digitalRead(cible1);
-    if (statusCible1 == LOW){
-     coursesCommencees = false;
-     coursesFinies = false;                  
-     fill_solid(leds, NUM_LEDS, CRGB::Red);  FastLED.show();
-     myDFPlayer.playMp3Folder(1); delay(3000);
-     FastLED.clear(); FastLED.show();
-     scores[joueurEnCours] = scores[joueurEnCours]+0;
-     // Remise à zéro des autres bonus
-     resetAllBonus0();  // Appel à la fonction de réinitialisation
-     Serial.println(0);}
+    if (statusCible1 == LOW) {
+      coursesCommencees = false;
+      coursesFinies = false;
+      fill_solid(leds, NUM_LEDS, CRGB::Red); FastLED.show();
+      myDFPlayer.playMp3Folder(1); delay(3000);
+      FastLED.clear(); FastLED.show();
+      scores[joueurEnCours] = scores[joueurEnCours] + 0 + pointBonus0[joueurEnCours];
+      pointBonus0[joueurEnCours] = pointBonus0[joueurEnCours] + 0;
+      resetAllBonus0();
+      // Envoi du message structuré pour le joueur
+      String message = "J" + String(joueurEnCours) + " : " + String(0) + " : " + String(pointBonus0[joueurEnCours]) + " : " + String(scores[joueurEnCours]);
+      Serial1.println(message);
+      Serial.println("📤 Envoi à ESP32: " + message);
+    }
 
     statusCible2 = digitalRead(cible2);
-    if (statusCible2 == LOW){
-     coursesCommencees = false; 
-     coursesFinies = false;                        
-     fill_solid(leds, NUM_LEDS, CRGB::Orange);  FastLED.show();
-     myDFPlayer.playMp3Folder(2); delay(3000);
-     FastLED.clear(); FastLED.show();
-     scores[joueurEnCours] = scores[joueurEnCours]+5+pointBonus5[joueurEnCours];
-     pointBonus5[joueurEnCours] = pointBonus5[joueurEnCours]+1;
-     // Remise à zéro des autres bonus
-     resetAllBonus5();  // Appel à la fonction de réinitialisation
-     Serial.println(5);}  
+    if (statusCible2 == LOW) {
+      coursesCommencees = false;
+      coursesFinies = false;
+      fill_solid(leds, NUM_LEDS, CRGB::Orange); FastLED.show();
+      myDFPlayer.playMp3Folder(2); delay(3000);
+      FastLED.clear(); FastLED.show();
+      scores[joueurEnCours] = scores[joueurEnCours] + 5 + pointBonus5[joueurEnCours];
+      pointBonus5[joueurEnCours] = pointBonus5[joueurEnCours] + 1;
+      resetAllBonus5();
+      // Envoi du message structuré pour le joueur
+      String message = "J" + String(joueurEnCours) + " : " + String(5) + " : " + String(pointBonus5[joueurEnCours]) + " : " + String(scores[joueurEnCours]);
+      Serial1.println(message);
+      Serial.println("📤 Envoi à ESP32 : " + message);
+    }
 
     statusCible3 = digitalRead(cible3);
-    if (statusCible3 == LOW){
-     coursesCommencees = false; 
-     coursesFinies = false;      
-     fill_solid(leds, NUM_LEDS, CRGB::Yellow);  FastLED.show();
-     myDFPlayer.playMp3Folder(3); delay(3000);
-     FastLED.clear(); FastLED.show();
-     scores[joueurEnCours] = scores[joueurEnCours]+10+pointBonus10[joueurEnCours];
-     pointBonus10[joueurEnCours] = pointBonus10[joueurEnCours]+2;
-     // Remise à zéro des autres bonus
-     resetAllBonus10();  // Appel à la fonction de réinitialisation
-     Serial.println(10);}
+    if (statusCible3 == LOW) {
+      coursesCommencees = false;
+      coursesFinies = false;
+      fill_solid(leds, NUM_LEDS, CRGB::Yellow); FastLED.show();
+      myDFPlayer.playMp3Folder(3); delay(3000);
+      FastLED.clear(); FastLED.show();
+      scores[joueurEnCours] = scores[joueurEnCours] + 10 + pointBonus10[joueurEnCours];
+      pointBonus10[joueurEnCours] = pointBonus10[joueurEnCours] + 2;
+      resetAllBonus10();
+      // Envoi du message structuré pour le joueur
+      String message = "J" + String(joueurEnCours) + " : " + String(10) + " : " + String(pointBonus10[joueurEnCours]) + " : " + String(scores[joueurEnCours]);
+      Serial1.println(message);
+      Serial.println("📤 Envoi à ESP32: " + message);
+    }
 
     statusCible4 = digitalRead(cible4);
     if (statusCible4 == LOW){
-     coursesCommencees = false; 
+      coursesCommencees = false; 
      coursesFinies = false;                              
-     fill_solid( leds, NUM_LEDS, CRGB::Green);  FastLED.show();
-     myDFPlayer.playMp3Folder(5); delay(3000);
-     FastLED.clear (); FastLED.show();
-     scores[joueurEnCours] = scores[joueurEnCours]+15+pointBonus15[joueurEnCours];
-     pointBonus15[joueurEnCours] = pointBonus15[joueurEnCours]+3;
-     // Remise à zéro des autres bonus
-     resetAllBonus15();  // Appel à la fonction de réinitialisation
-     Serial.println(15);}   
+      fill_solid( leds, NUM_LEDS, CRGB::Green);  FastLED.show();
+      myDFPlayer.playMp3Folder(5); delay(3000);
+      FastLED.clear (); FastLED.show();
+      scores[joueurEnCours] = scores[joueurEnCours]+15+pointBonus15[joueurEnCours];
+      pointBonus15[joueurEnCours] = pointBonus15[joueurEnCours]+3;
+      resetAllBonus15();
+      // Envoi du message structuré pour le joueur
+      String message = "J" + String(joueurEnCours) + " : " + String(15) + " : " + String(pointBonus15[joueurEnCours]) + " : " + String(scores[joueurEnCours]);
+      Serial1.println(message);
+      Serial.println("📤 Envoi à ESP32: " + message);
+    }  
 
     statusCible5 = digitalRead(cible5);
     if (statusCible5 == LOW){
-     coursesCommencees = false; 
-     coursesFinies = false;
-     fill_solid(leds, NUM_LEDS, CRGB::Blue);  FastLED.show();
-     myDFPlayer.playMp3Folder(8); delay(3000);
-     FastLED.clear(); FastLED.show();
-     scores[joueurEnCours] = scores[joueurEnCours]+25+pointBonus25[joueurEnCours];
-     pointBonus25[joueurEnCours] = pointBonus25[joueurEnCours]+4;
-     // Remise à zéro des autres bonus
-     resetAllBonus25();  // Appel à la fonction de réinitialisation
-     Serial.println(25);}    
+      coursesCommencees = false; 
+      coursesFinies = false;
+      fill_solid(leds, NUM_LEDS, CRGB::Blue);  FastLED.show();
+      myDFPlayer.playMp3Folder(8); delay(3000);
+      FastLED.clear(); FastLED.show();
+      scores[joueurEnCours] = scores[joueurEnCours]+25+pointBonus25[joueurEnCours];
+      pointBonus25[joueurEnCours] = pointBonus25[joueurEnCours]+4;
+      resetAllBonus25();
+      // Envoi du message structuré pour le joueur
+      String message = "J" + String(joueurEnCours) + " : " + String(25) + " : " + String(pointBonus25[joueurEnCours]) + " : " + String(scores[joueurEnCours]);
+      Serial1.println(message);
+      Serial.println("📤 Envoi à ESP32: " + message);     
+    }   
 
     statusCible6 = digitalRead(cible6);
     if (statusCible6 == LOW){
-     coursesCommencees = false; 
-     coursesFinies = false;
-     Cinquante();               
-     scores[joueurEnCours] = scores[joueurEnCours]+50+pointBonus50[joueurEnCours];
-     pointBonus50[joueurEnCours] = pointBonus50[joueurEnCours]+5;
-     // Remise à zéro des autres bonus
-     resetAllBonus50();  // Appel à la fonction de réinitialisation
-     Serial.println(50);}
+      coursesCommencees = false; 
+      coursesFinies = false;
+      Cinquante();               
+      scores[joueurEnCours] = scores[joueurEnCours]+50+pointBonus50[joueurEnCours];
+      pointBonus50[joueurEnCours] = pointBonus50[joueurEnCours]+5;
+      resetAllBonus50();
+      // Envoi du message structuré pour le joueur
+      String message = "J" + String(joueurEnCours) + " : " + String(50) + " : " + String(pointBonus50[joueurEnCours]) + " : " + String(scores[joueurEnCours]);
+      Serial1.println(message);
+      Serial.println("📤 Envoi à ESP32: " + message);
+    }
 
     statusCible7 = digitalRead(cible7);
     if (statusCible7 == LOW){
-     coursesCommencees = false; 
-     coursesFinies = false;
-     Cent();
-     scores[joueurEnCours] = scores[joueurEnCours]+100+pointBonus100[joueurEnCours];
-     pointBonus100[joueurEnCours] = pointBonus100[joueurEnCours]+10;
-     // Remise à zéro des autres bonus
-     resetAllBonus100();  // Appel à la fonction de réinitialisation
-     Serial.println(100);}
+      coursesCommencees = false; 
+      coursesFinies = false;
+      Cent();
+      scores[joueurEnCours] = scores[joueurEnCours]+100+pointBonus100[joueurEnCours];
+      pointBonus100[joueurEnCours] = pointBonus100[joueurEnCours]+10;
+      resetAllBonus100();
+      // Envoi du message structuré pour le joueur
+      String message = "J" + String(joueurEnCours) + " : " + String(100) + " : " + String(pointBonus100[joueurEnCours]) + " : " + String(scores[joueurEnCours]);
+      Serial1.println(message);
+      Serial.println("📤 Envoi à ESP32: " + message);
+    }
 
     statusCible8 = digitalRead(cible8);
     if (statusCible8 == LOW){
-     coursesCommencees = false; 
-     coursesFinies = false;
-     CentCinquante();
-     scores[joueurEnCours] = scores[joueurEnCours]+150+pointBonus150[joueurEnCours];
-     pointBonus150[joueurEnCours] = pointBonus150[joueurEnCours]+15;
-     // Remise à zéro des autres bonus
-     resetAllBonus150();  // Appel à la fonction de réinitialisation
-     Serial.println(150);}
+      coursesCommencees = false; 
+      coursesFinies = false;
+      CentCinquante();
+      scores[joueurEnCours] = scores[joueurEnCours]+150+pointBonus150[joueurEnCours];
+      pointBonus150[joueurEnCours] = pointBonus150[joueurEnCours]+15;
+      resetAllBonus150();
+      // Envoi du message structuré pour le joueur
+      String message = "J" + String(joueurEnCours) + " : " + String(150) + " : " + String(pointBonus150[joueurEnCours]) + " : " + String(scores[joueurEnCours]);
+      Serial1.println(message);
+      Serial.println("📤 Envoi à ESP32: " + message);
+    }
 
     statusCible9 = digitalRead(cible9);
     if (statusCible9 == LOW){
-     coursesCommencees = false; 
-     coursesFinies = false;
-     DeuxCent();
-     scores[joueurEnCours] = scores[joueurEnCours]+200+pointBonus200[joueurEnCours];
-     pointBonus200[joueurEnCours] = pointBonus200[joueurEnCours]+20;
-     // Remise à zéro des autres bonus
-     resetAllBonus200();  // Appel à la fonction de réinitialisation
-     Serial.println(200);}
+      coursesCommencees = false; 
+      coursesFinies = false;
+      DeuxCent();
+      scores[joueurEnCours] = scores[joueurEnCours]+200+pointBonus200[joueurEnCours];
+      pointBonus200[joueurEnCours] = pointBonus200[joueurEnCours]+20;
+      resetAllBonus200();
+      // Envoi du message structuré pour le joueur
+      String message = "J" + String(joueurEnCours) + " : " + String(200) + " : " + String(pointBonus200[joueurEnCours]) + " : " + String(scores[joueurEnCours]);
+      Serial1.println(message);
+      Serial.println("📤 Envoi à ESP32: " + message);
+    }
 
     statusCible10 = digitalRead(cible10);
     if (statusCible10 == LOW){
-     coursesCommencees = false; 
-     coursesFinies = false;
-     DeuxCentCinquante();
-     scores[joueurEnCours] = scores[joueurEnCours]+250+pointBonus250[joueurEnCours];
-     pointBonus250[joueurEnCours] = pointBonus250[joueurEnCours]+25;
-     // Remise à zéro des autres bonus
-     resetAllBonus250();  // Appel à la fonction de réinitialisation
-     Serial.println(250);}
+      coursesCommencees = false; 
+      coursesFinies = false;
+      DeuxCentCinquante();
+      scores[joueurEnCours] = scores[joueurEnCours]+250+pointBonus250[joueurEnCours];
+      pointBonus250[joueurEnCours] = pointBonus250[joueurEnCours]+25;
+      resetAllBonus250();
+      // Envoi du message structuré pour le joueur
+      String message = "J" + String(joueurEnCours) + " : " + String(250) + " : " + String(pointBonus250[joueurEnCours]) + " : " + String(scores[joueurEnCours]);
+      Serial1.println(message);
+      Serial.println("📤 Envoi à ESP32: " + message);
+    }
            
     else {
       killer[joueurEnCours] = 0;
       }
   SMRAZ();                 
-  GererInterruption();  
+  GererInterruption();
 }
 
 void Penalite() { 
@@ -177,6 +219,7 @@ void Penalite() {
     lcd.setCursor(11,3);
     lcd.print("TR: ");
     coursesCommencees = true;
+//    Serial.println("coursesCommencees");
     // Réinitialisation des couleurs et états
     memset(colorIndexes, 0, sizeof(colorIndexes)); // Réinitialise tous les index de couleur
     memset(lastColorChanges, 0, sizeof(lastColorChanges));
@@ -226,6 +269,7 @@ void Penalite() {
      if(tempsrestant < 0)
      {
       coursesFinies = true;
+//      Serial.println("coursesFinies");
       SMRAZTP();
       lcd.clear();
       clignotementLED(1);
@@ -249,11 +293,22 @@ void Penalite() {
       GererInterruption();  // 🔄 Passe au joueur suivant immédiatement  
      }
      else lcd.print(tempsrestant);
+//     Serial.println("tempsrestant");
     }         
 }
 
 void GererInterruption(){
+  Serial.println("GererInterruption - Debut");
+  noInterrupts();
+
+  Serial.print("joueurEnCours: "); Serial.println(joueurEnCours);
+  Serial.print("tourEnCours: "); Serial.println(tourEnCours);
+  Serial.print("resteEnCours: "); Serial.println(resteEnCours);
+  Serial.print("nbJoueurs: "); Serial.println(nbJoueurs);
+  Serial.print("nbTours: "); Serial.println(nbTours);
+
   if ( joueurEnCours == nbJoueurs && tourEnCours == nbTours && resteEnCours == 1 ){
+    Serial.println("GererInterruption - Fin de partie");
     testKiller();
     coursesCommencees = false;
     coursesFinies = false;
@@ -263,11 +318,13 @@ void GererInterruption(){
   }
   else if (  joueurEnCours == nbJoueurs && resteEnCours == 1 )
   {
+    Serial.println("GererInterruption - Nouveau tour");
     myDFPlayer.stop();
     testKiller();
     joueurEnCours = 1;           
     resteEnCours = 3;
     tourEnCours++;
+    Serial.print("Nouveau tourEnCours: "); Serial.println(tourEnCours); // Log
     EcranTourSuivant();    
     myDFPlayer.playMp3Folder(30);   
     EcranJoueurSuivant();  
@@ -284,13 +341,15 @@ void GererInterruption(){
         lcd.print("Start --> OK");
         FastLED.clear(); FastLED.show();                   
    }
-   EcranGo();                      
+   EcranGo();                    
   }
   else if ( resteEnCours != 1 ){
+    Serial.println("GererInterruption - Reste en cours");
     resteEnCours--; 
   }  
   else
   {      
+    Serial.println("GererInterruption - Nouveau joueur");
     testKiller();
     joueurEnCours++;
     resteEnCours = 3;
@@ -312,6 +371,8 @@ void GererInterruption(){
    }
    EcranGo();    
   }
+  Serial.println("GererInterruption - Fin");
+  interrupts();  
 }
 
 void EcranInitialisation(){
@@ -346,7 +407,9 @@ void InitGame(){
     initialisation = false;
     partieEnCours = true;
     EcranEnJeu();
-    EcranGo(); 
+    EcranGo();
+//    Serial1.println("GO");
+//    Serial.println("📤 Envoi à ESP32: GO");
 }
 
 // ----------------------------------------------------------------------------------------------
