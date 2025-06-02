@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/websocket_service.dart';
 import '../models/group_model.dart';
+import '../models/game_ui_state.dart';
 import 'classement_screen.dart';
 
 class ScoresScreen extends StatefulWidget {
@@ -14,43 +15,20 @@ class ScoresScreen extends StatefulWidget {
 }
 
 class _ScoresScreenState extends State<ScoresScreen> with TickerProviderStateMixin {
-  // === ANIMATIONS ===
   late AnimationController _controller;
   late AnimationController _overlayController;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
-
-  // === ÉTAT ===
-  bool showFinGameOverlay = false;
-  bool hasNavigatedToClassement = false;
-
-  // === NOUVEL ÉTAT POUR LE BOUTON "ATTENTE GROUPE" ===
-  bool _isAttenteGroupeButtonEnabled = false;
-  Color _attenteGroupeButtonColor = const Color(0xFF7DBFF8); // Bleu par défaut
-  String _attenteGroupeButtonText = 'Partie en attente';
-  bool _isAttenteGroupeButtonBlinking = false; // Ajout du booléen pour le clignotement
-
-  // === GESTION DES BOUTONS ===
-  String _nextPlayerButtonText = 'Joueur suivant';
-  String _nextTurnButtonText = 'Tour suivant';
-
-  Color _nextPlayerButtonColor = Colors.blue;
-  Color _nextTurnButtonColor = Colors.blue;
-
-  bool _isNextPlayerButtonBlinking = false;
-  bool _isNextTurnButtonBlinking = false;
-
-  bool _isNextPlayerButtonEnabled = false;
-  bool _isNextTurnButtonEnabled = false;
-
   late AnimationController _blinkController;
   StreamSubscription<String>? _messageSubscription;
+
+  bool showFinGameOverlay = false;
+  bool hasNavigatedToClassement = false;
 
   @override
   void initState() {
     super.initState();
 
-    // Initialisation des contrôleurs d'animation
     _controller = AnimationController(duration: const Duration(milliseconds: 500), vsync: this);
     _fadeAnimation = Tween<double>(begin: 0, end: 1).animate(_controller);
     _scaleAnimation = Tween<double>(begin: 0.95, end: 1).animate(_controller);
@@ -61,15 +39,16 @@ class _ScoresScreenState extends State<ScoresScreen> with TickerProviderStateMix
     );
 
     _blinkController = AnimationController(
-      duration: const Duration(seconds: 1), // Clignotement toutes les secondes
+      duration: const Duration(seconds: 1),
       vsync: this,
     );
-    //_blinkController.repeat(reverse: true); // Suppression de l'appel à repeat ici
 
-    // Lancer l'animation au démarrage
     _controller.forward();
 
-    // Configuration de l'écouteur WebSocket
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateBlinkingAnimation();
+    });
+
     _setupWebSocketListener();
   }
 
@@ -79,170 +58,149 @@ class _ScoresScreenState extends State<ScoresScreen> with TickerProviderStateMix
       final data = json.decode(message) as Map<String, dynamic>;
       final type = data['type'] as String?;
       if (type != null) {
-        _handleWebSocketMessage(type, message); // Pass the message here
+        _handleWebSocketMessage(type, message);
       }
     });
   }
 
-  void _handleWebSocketMessage(String type, String message) { // Receive the message here
+  void _handleWebSocketMessage(String type, String message) {
     if (!mounted) return;
+    final uiState = Provider.of<GameUIState>(context, listen: false);
 
     setState(() {
-      switch (type) {
-        case 'game_status':
-          final data = json.decode(message) as Map<String, dynamic>;
-          final wsMessage = data['message'] as String?;
-          if (wsMessage == 'START') {
-            print('Message "START" reçu'); // Ajout du print
-            _updateButtonStates(
-              nextPlayerColor: Colors.green,
-              nextTurnColor: Colors.green,
-              nextPlayerEnabled: false,
-              nextTurnEnabled: false,
-              nextPlayerBlinking: false,
-              nextTurnBlinking: false,
-            );
-            _updateAttenteGroupeButtonState(
-              color: Colors.orange,
-              enabled: true,
-              text: 'Partie en attente',
-              blinking: true, // Activer le clignotement
-            );
-          } else if (wsMessage == 'CONFIRMED_GAME') { // Ajout de la condition pour CONFIRMED_GAME
-            _updateButtonStates(
-              nextPlayerColor: Colors.green,
-              nextTurnColor: Colors.green,
-              nextPlayerEnabled: false,
-              nextTurnEnabled: false,
-              nextPlayerBlinking: false,
-              nextTurnBlinking: false,
-            );
-            _updateAttenteGroupeButtonState(
-              color: Colors.green,
-              enabled: false,
-              text: 'Partie lancée',
-              blinking: false, // Désactiver le clignotement
-            );
-          }
-          break;
-        case 'START_GAME_CONFIRMED': // Suppression car non utilisé
-          break;
-        case 'NEXT_PLAYER':
-          _updateButtonStates(
-            nextPlayerColor: Colors.orange,
-            nextTurnColor: Colors.green,
-            nextPlayerEnabled: true,
-            nextTurnEnabled: false,
-            nextPlayerBlinking: true,
-            nextTurnBlinking: false,
+      if (type == 'game_status') {
+        final data = json.decode(message) as Map<String, dynamic>;
+        final wsMessage = data['message'] as String?;
+        if (wsMessage == 'START') {
+          uiState.updateNextPlayer(
+            enabled: false,
+            color: Colors.green,
+            blinking: false,
           );
-          break;
-        case 'NEXT_TURN':
-          _updateButtonStates(
-            nextPlayerColor: Colors.orange,
-            nextTurnColor: Colors.green,
-            nextPlayerEnabled: false,
-            nextTurnEnabled: true,
-            nextPlayerBlinking: false,
-            nextTurnBlinking: true,
+          uiState.updateNextTurn(
+            enabled: false,
+            color: Colors.green,
+            blinking: false,
           );
-          break;
-        case 'FIN_GAME':
+          uiState.updateAttenteGroupe(
+            color: Colors.orange,
+            enabled: true,
+            text: 'Partie en attente',
+            blinking: true,
+          );
+        }
+        // Activation du bouton "Tour suivant" sur réception du bon message
+        if (wsMessage == 'NEXT_TURN') {
+          uiState.updateNextTurn(
+            enabled: true,
+            color: Colors.orange,
+            blinking: true,
+          );
+          uiState.updateNextPlayer(
+            enabled: false,
+            color: Colors.green,
+            blinking: false,
+          );
+        }
+        // Activation du bouton "Joueur suivant" sur réception du bon message
+        if (wsMessage == 'NEXT_PLAYER') {
+          uiState.updateNextPlayer(
+            enabled: true,
+            color: Colors.orange,
+            blinking: true,
+          );
+          uiState.updateNextTurn(
+            enabled: false,
+            color: Colors.green,
+            blinking: false,
+          );
+        }
+        if (wsMessage == 'FIN_GAME') {
           _showFinGameOverlay();
-          _updateButtonStates(
-            nextPlayerColor: Colors.blue,
-            nextTurnColor: Colors.blue,
-            nextPlayerEnabled: false,
-            nextTurnEnabled: false,
-            nextPlayerBlinking: false,
-            nextTurnBlinking: false,
+          uiState.updateNextPlayer(
+            enabled: false,
+            color: Colors.blue,
+            blinking: false,
           );
-          _updateAttenteGroupeButtonState(
+          uiState.updateNextTurn(
+            enabled: false,
+            color: Colors.blue,
+            blinking: false,
+          );
+          uiState.updateAttenteGroupe(
             color: const Color(0xFF7DBFF8),
             enabled: false,
             text: 'Attente groupe',
-            blinking: false, // Désactiver le clignotement
+            blinking: false,
           );
-          break;
+        }
       }
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateBlinkingAnimation();
     });
   }
 
-  // === NOUVELLE FONCTION POUR METTRE À JOUR L'ÉTAT DU BOUTON "ATTENTE GROUPE" ===
-  void _updateAttenteGroupeButtonState({
-    required Color color,
-    required bool enabled,
-    required String text,
-    required bool blinking, // Ajout du paramètre blinking
-  }) {
-    print('Appel de _updateAttenteGroupeButtonState avec enabled = $enabled'); // Ajout du print
-    _attenteGroupeButtonColor = color;
-    _isAttenteGroupeButtonEnabled = enabled;
-    _attenteGroupeButtonText = text;
-    _isAttenteGroupeButtonBlinking = blinking; // Mettre à jour l'état du clignotement
-
-    if (_isAttenteGroupeButtonBlinking) {
-      _blinkController.repeat(reverse: true); // Démarrer l'animation de clignotement
-    } else {
-      _blinkController.stop(); // Arrêter l'animation de clignotement
-    }
-  }
-
-  // Fonction pour envoyer le message "START_GAME"
-  void _onStartGamePressed() {
-    print('Fonction _onStartGamePressed appelée'); // Ajout du print
-    final ws = Provider.of<WebSocketService>(context, listen: false);
-    ws.sendMessage(json.encode({'type': 'game_status', 'message': 'START_GAME'}));
-  }
-
-  void _updateButtonStates({
-    required Color nextPlayerColor,
-    required Color nextTurnColor,
-    required bool nextPlayerEnabled,
-    required bool nextTurnEnabled,
-    required bool nextPlayerBlinking,
-    required bool nextTurnBlinking,
-  }) {
-    _nextPlayerButtonColor = nextPlayerColor;
-    _nextTurnButtonColor = nextTurnColor;
-
-    _isNextPlayerButtonEnabled = nextPlayerEnabled;
-    _isNextTurnButtonEnabled = nextTurnEnabled;
-
-    _isNextPlayerButtonBlinking = nextPlayerBlinking;
-    _isNextTurnButtonBlinking = nextTurnBlinking;
-
-    if (_isNextPlayerButtonBlinking || _isNextTurnButtonBlinking) {
-      _blinkController.repeat(reverse: true);
+  void _updateBlinkingAnimation() {
+    final uiState = Provider.of<GameUIState>(context, listen: false);
+    final blinking = uiState.attenteGroupeBlinking || uiState.nextPlayerBlinking || uiState.nextTurnBlinking;
+    if (blinking) {
+      if (!_blinkController.isAnimating) {
+        _blinkController.repeat(reverse: true);
+      }
     } else {
       _blinkController.stop();
+      _blinkController.value = 1.0;
     }
+  }
+
+  void _onStartGamePressed() {
+    final ws = Provider.of<WebSocketService>(context, listen: false);
+    ws.sendMessage(json.encode({'type': 'game_status', 'message': 'START_GAME'}));
+    final uiState = Provider.of<GameUIState>(context, listen: false);
+    uiState.updateAttenteGroupe(
+      color: Colors.green,
+      enabled: false,
+      text: 'Partie lancée',
+      blinking: false,
+      disabledColor: Colors.green,
+    );
+    _updateBlinkingAnimation();
   }
 
   void _onNextPlayerPressed() {
     final ws = Provider.of<WebSocketService>(context, listen: false);
     ws.sendMessage(json.encode({'type': 'next_player', 'message': 'NEXT_PLAYER'}));
-    _updateButtonStates(
-      nextPlayerColor: Colors.green,
-      nextTurnColor: Colors.green,
-      nextPlayerEnabled: false,
-      nextTurnEnabled: false,
-      nextPlayerBlinking: false,
-      nextTurnBlinking: false,
+    final uiState = Provider.of<GameUIState>(context, listen: false);
+    uiState.updateNextPlayer(
+      enabled: false,
+      color: Colors.green,
+      blinking: false,
     );
+    uiState.updateNextTurn(
+      enabled: false,
+      color: Colors.green,
+      blinking: false,
+    );
+    _updateBlinkingAnimation();
   }
 
   void _onNextTurnPressed() {
     final ws = Provider.of<WebSocketService>(context, listen: false);
-    ws.sendMessage(json.encode({'type': 'next_turn', 'message': 'NEXT_TURN'}));
-    _updateButtonStates(
-      nextPlayerColor: Colors.green,
-      nextTurnColor: Colors.green,
-      nextPlayerEnabled: false,
-      nextTurnEnabled: false,
-      nextPlayerBlinking: false,
-      nextTurnBlinking: false,
+    ws.sendMessage(json.encode({'type': 'game_status', 'message': 'NEXT_TURN'}));
+    final uiState = Provider.of<GameUIState>(context, listen: false);
+    uiState.updateNextPlayer(
+      enabled: false,
+      color: Colors.green,
+      blinking: false,
     );
+    uiState.updateNextTurn(
+      enabled: false,
+      color: Colors.green,
+      blinking: false,
+    );
+    _updateBlinkingAnimation();
   }
 
   void _showFinGameOverlay() async {
@@ -276,8 +234,9 @@ class _ScoresScreenState extends State<ScoresScreen> with TickerProviderStateMix
   Widget build(BuildContext context) {
     final ws = Provider.of<WebSocketService>(context);
     final groupModel = Provider.of<GroupModel>(context);
+    final uiState = Provider.of<GameUIState>(context);
 
-    print('La valeur de _isAttenteGroupeButtonEnabled est : $_isAttenteGroupeButtonEnabled'); // Ajout du print
+    _updateBlinkingAnimation();
 
     return Scaffold(
       appBar: AppBar(
@@ -311,23 +270,24 @@ class _ScoresScreenState extends State<ScoresScreen> with TickerProviderStateMix
               ),
             ),
           ),
-          // Bouton "Partie en attente"
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: FadeTransition( // Ajouter FadeTransition pour le clignotement
-              opacity: _isAttenteGroupeButtonBlinking ? Tween<double>(begin: 1.0, end: 0.0).animate(_blinkController) : const AlwaysStoppedAnimation(1.0), // Contrôler l'opacité avec l'animation de clignotement
+            child: FadeTransition(
+              opacity: uiState.attenteGroupeBlinking
+                  ? Tween<double>(begin: 1.0, end: 0.0).animate(_blinkController)
+                  : const AlwaysStoppedAnimation(1.0),
               child: ElevatedButton(
-                onPressed: _isAttenteGroupeButtonEnabled ? _onStartGamePressed : null,
+                onPressed: uiState.attenteGroupeEnabled ? _onStartGamePressed : null,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _attenteGroupeButtonColor,
-                  disabledBackgroundColor: const Color(0xFF7DBFF8),
+                  backgroundColor: uiState.attenteGroupeColor,
+                  disabledBackgroundColor: uiState.attenteGroupeDisabledColor,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(20),
                   ),
                 ),
                 child: Text(
-                  _attenteGroupeButtonText,
+                  uiState.attenteGroupeText,
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     color: Colors.black,
@@ -336,50 +296,60 @@ class _ScoresScreenState extends State<ScoresScreen> with TickerProviderStateMix
               ),
             ),
           ),
-          // Bouton "Joueur suivant"
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: ElevatedButton(
-              onPressed: _isNextPlayerButtonEnabled ? _onNextPlayerPressed : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _nextPlayerButtonColor,
-                disabledBackgroundColor: Colors.blue,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-              ),
-              child: Text(
-                _nextPlayerButtonText,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black,
-                ),
-              ),
-            ),
-          ),
-          // Bouton "Tour suivant"
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: ElevatedButton(
-              onPressed: _isNextTurnButtonEnabled ? _onNextTurnPressed : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _nextTurnButtonColor,
-                disabledBackgroundColor: Colors.blue,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-              ),
-              child: Text(
-                _nextTurnButtonText,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black,
+          if (uiState.attenteGroupeText != "Attente groupe") ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: FadeTransition(
+                opacity: uiState.nextPlayerBlinking
+                    ? Tween<double>(begin: 1.0, end: 0.0).animate(_blinkController)
+                    : const AlwaysStoppedAnimation(1.0),
+                child: ElevatedButton(
+                  onPressed: uiState.nextPlayerEnabled ? _onNextPlayerPressed : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: uiState.nextPlayerColor,
+                    disabledBackgroundColor: Colors.blue,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                  ),
+                  child: const Text(
+                    'Joueur suivant',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: FadeTransition(
+                opacity: uiState.nextTurnBlinking
+                    ? Tween<double>(begin: 1.0, end: 0.0).animate(_blinkController)
+                    : const AlwaysStoppedAnimation(1.0),
+                child: ElevatedButton(
+                  onPressed: uiState.nextTurnEnabled ? _onNextTurnPressed : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: uiState.nextTurnColor,
+                    disabledBackgroundColor: Colors.blue,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                  ),
+                  child: const Text(
+                    'Tour suivant',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
       body: SafeArea(
