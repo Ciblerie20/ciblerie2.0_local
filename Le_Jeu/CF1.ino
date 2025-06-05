@@ -1,457 +1,513 @@
+import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../services/websocket_service.dart';
+import '../models/group_model.dart';
+import '../models/game_ui_state.dart';
+import 'classement_screen.dart';
 
-void CF1(){ //------------------------------------------------------------------------------------
-  Serial.println(F("CF1"));
-  Serial.println(F("CF1 , Ok pour le lancement du jeu"));
+class ScoresScreen extends StatefulWidget {
+  const ScoresScreen({super.key});
 
-  Serial1.println("START_GAME");
-  Serial.println("📨 Envoyer de CF1 à ESP32: START_GAME");
-
-  indexgroupe = 0;  // Toujours revenir au groupe F avant le début de chaque partie
-  AcquisitionCapteurs();
-  if (initialisation==true){InitGame();}   
-  if (partieEnCours==true){trtPartieEnCours();} 
-  if (partieFinie==true){trtPartieFinie();}
+  @override
+  State<ScoresScreen> createState() => _ScoresScreenState();
 }
-//---------------------------------------------FIN LOOP-------------------------------
 
-void trtPartieFinie(){  
-    FinGame();
-  Serial1.println("FIN_GAME");
-  Serial.println("📤 Envoi à ESP32: FIN_GAME"); 
-    while(killer[1]==1 || killer[2]==1 || killer[3]==1 || killer[4]==1 ){
-      Serial.println("KILLER STATUS J1 " + String(killer[1]) + String(killer[2]) + String(killer[3]) + String(killer[4]));   
-        for (int i = 1; i <= nbJoueurs ; i++){
-          if (killer[i] == 1){
-            joueurEnCours = i;
-          }
-        } 
-        delay(1); // Ajout d'un délai minimal
-    }
-  partieFinie = false;
-  partieEnCours = false;
-  initialisation = true;
-  oldNbJoueurs = 0;
-  triclassement();
-  AfficheFin();
-}  
-// ---------------------------------FIN trtPartieFinie ----------------------------------
+class _ScoresScreenState extends State<ScoresScreen> with TickerProviderStateMixin {
+  late AnimationController _controller;
+  late AnimationController _overlayController;
+  late Animation<double> _fadeAnimation;
+  late Animation<double> _scaleAnimation;
+  late AnimationController _blinkController;
+  StreamSubscription<String>? _messageSubscription;
 
-void trtPartieEnCours() {
-    FastLED.clear(); FastLED.show();
-    Temporisation();
-    EcranEnJeu();
+  bool showFinGameOverlay = false;
+  bool hasNavigatedToClassement = false;
 
-    // Lecture de l'état des capteurs AVANT d'entrer dans la boucle
-    bool capteur1Etat = digitalRead(cible1) == HIGH;
-    bool capteur2Etat = digitalRead(cible2) == HIGH;
-    bool capteur3Etat = digitalRead(cible3) == HIGH;
-    bool capteur4Etat = digitalRead(cible4) == HIGH;
-    bool capteur5Etat = digitalRead(cible5) == HIGH;
-    bool capteur6Etat = digitalRead(cible6) == HIGH;
-    bool capteur7Etat = digitalRead(cible7) == HIGH;
-    bool capteur8Etat = digitalRead(cible8) == HIGH;
-    bool capteur9Etat = digitalRead(cible9) == HIGH;
-    bool capteur10Etat = digitalRead(cible10) == HIGH;
+  @override
+  void initState() {
+    super.initState();
 
-    while (capteur1Etat && capteur2Etat && capteur3Etat && capteur4Etat && capteur5Etat && capteur6Etat && capteur7Etat && capteur8Etat && capteur9Etat && capteur10Etat) {
-      AcquisitionCapteurs();    
-      Penalite();     
-      if (partieFinie==true){
-        break;
+    _controller = AnimationController(duration: const Duration(milliseconds: 500), vsync: this);
+    _fadeAnimation = Tween<double>(begin: 0, end: 1).animate(_controller);
+    _scaleAnimation = Tween<double>(begin: 0.95, end: 1).animate(_controller);
+
+    _overlayController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+
+    _blinkController = AnimationController(
+      duration: const Duration(seconds: 1),
+      vsync: this,
+    );
+
+    _controller.forward();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateBlinkingAnimation();
+    });
+
+    _setupWebSocketListener();
+  }
+
+  void _setupWebSocketListener() {
+    final ws = Provider.of<WebSocketService>(context, listen: false);
+    _messageSubscription = ws.messages.listen((message) {
+      final data = json.decode(message) as Map<String, dynamic>;
+      final type = data['type'] as String?;
+      if (type != null) {
+        _handleWebSocketMessage(type, message);
+      }
+    });
+  }
+
+  void _handleWebSocketMessage(String type, String message) {
+    if (!mounted) return;
+    final uiState = Provider.of<GameUIState>(context, listen: false);
+
+    setState(() {
+      if (type == 'game_status') {
+        final data = json.decode(message) as Map<String, dynamic>;
+        final wsMessage = data['message'] as String?;
+        if (wsMessage == 'START') {
+          uiState.updateNextPlayer(
+            enabled: false,
+            color: Colors.green,
+            blinking: false,
+          );
+          uiState.updateNextTurn(
+            enabled: false,
+            color: Colors.green,
+            blinking: false,
+          );
+          uiState.updateAttenteGroupe(
+            color: Colors.orange,
+            enabled: true,
+            text: 'Partie en attente',
+            blinking: true,
+          );
         }
-      else {      
-          killer[joueurEnCours] = 0;
+        // Activation du bouton "Tour suivant" sur réception du bon message
+        if (wsMessage == 'NEXT_TURN') {
+          uiState.updateNextTurn(
+            enabled: true,
+            color: Colors.orange,
+            blinking: true,
+          );
+          uiState.updateNextPlayer(
+            enabled: false,
+            color: Colors.green,
+            blinking: false,
+          );
+          uiState.updateAttenteGroupe(
+            color: Colors.green,
+            enabled: false,
+            text: 'Partie lancée',
+            blinking: false,
+          );
+        }
+        if (wsMessage == 'NEXT_PLAYER') {
+          uiState.updateNextPlayer(
+            enabled: true,
+            color: Colors.orange,
+            blinking: true,
+          );
+          uiState.updateNextTurn(
+            enabled: false,
+            color: Colors.green,
+            blinking: false,
+          );
+          uiState.updateAttenteGroupe(
+            color: Colors.green,
+            enabled: false,
+            text: 'Partie lancée',
+            blinking: false,
+          );
+        }
+        if (wsMessage == 'FIN_GAME') {
+          _showFinGameOverlay();
+          uiState.updateNextPlayer(
+            enabled: false,
+            color: Colors.blue,
+            blinking: false,
+          );
+          uiState.updateNextTurn(
+            enabled: false,
+            color: Colors.blue,
+            blinking: false,
+          );
+          uiState.updateAttenteGroupe(
+            color: const Color(0xFF7DBFF8),
+            enabled: false,
+            text: 'Attente groupe',
+            blinking: false,
+          );
+        }
       }
-      delay(1); // Ajout d'un délai minimal
+    });
 
-      // Relecture de l'état des capteurs à chaque itération
-      capteur1Etat = digitalRead(cible1) == HIGH;
-      capteur2Etat = digitalRead(cible2) == HIGH;
-      capteur3Etat = digitalRead(cible3) == HIGH;
-      capteur4Etat = digitalRead(cible4) == HIGH;
-      capteur5Etat = digitalRead(cible5) == HIGH;
-      capteur6Etat = digitalRead(cible6) == HIGH;
-      capteur7Etat = digitalRead(cible7) == HIGH;
-      capteur8Etat = digitalRead(cible8) == HIGH;
-      capteur9Etat = digitalRead(cible9) == HIGH;
-      capteur10Etat = digitalRead(cible10) == HIGH;
-    }
-    
-    statusCible1 = digitalRead(cible1);
-    if (statusCible1 == LOW) {
-      coursesCommencees = false;
-      coursesFinies = false;
-      fill_solid(leds, NUM_LEDS, CRGB::Red); FastLED.show();
-      myDFPlayer.playMp3Folder(1); delay(3000);
-      FastLED.clear(); FastLED.show();
-      scores[joueurEnCours] = scores[joueurEnCours] + 0 + pointBonus0[joueurEnCours];
-      pointBonus0[joueurEnCours] = pointBonus0[joueurEnCours] + 0;
-      resetAllBonus0();
-      // Envoi du message structuré pour le joueur
-      String message = "J" + String(joueurEnCours) + " : " + String(0) + " : " + String(pointBonus0[joueurEnCours]) + " : " + String(scores[joueurEnCours]);
-      Serial1.println(message);
-      Serial.println("📤 Envoi à ESP32: " + message);
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateBlinkingAnimation();
+    });
+  }
 
-    statusCible2 = digitalRead(cible2);
-    if (statusCible2 == LOW) {
-      coursesCommencees = false;
-      coursesFinies = false;
-      fill_solid(leds, NUM_LEDS, CRGB::Orange); FastLED.show();
-      myDFPlayer.playMp3Folder(2); delay(3000);
-      FastLED.clear(); FastLED.show();
-      scores[joueurEnCours] = scores[joueurEnCours] + 5 + pointBonus5[joueurEnCours];
-      pointBonus5[joueurEnCours] = pointBonus5[joueurEnCours] + 1;
-      resetAllBonus5();
-      // Envoi du message structuré pour le joueur
-      String message = "J" + String(joueurEnCours) + " : " + String(5) + " : " + String(pointBonus5[joueurEnCours]) + " : " + String(scores[joueurEnCours]);
-      Serial1.println(message);
-      Serial.println("📤 Envoi à ESP32 : " + message);
-    }
-
-    statusCible3 = digitalRead(cible3);
-    if (statusCible3 == LOW) {
-      coursesCommencees = false;
-      coursesFinies = false;
-      fill_solid(leds, NUM_LEDS, CRGB::Yellow); FastLED.show();
-      myDFPlayer.playMp3Folder(3); delay(3000);
-      FastLED.clear(); FastLED.show();
-      scores[joueurEnCours] = scores[joueurEnCours] + 10 + pointBonus10[joueurEnCours];
-      pointBonus10[joueurEnCours] = pointBonus10[joueurEnCours] + 2;
-      resetAllBonus10();
-      // Envoi du message structuré pour le joueur
-      String message = "J" + String(joueurEnCours) + " : " + String(10) + " : " + String(pointBonus10[joueurEnCours]) + " : " + String(scores[joueurEnCours]);
-      Serial1.println(message);
-      Serial.println("📤 Envoi à ESP32: " + message);
-    }
-
-    statusCible4 = digitalRead(cible4);
-    if (statusCible4 == LOW){
-      coursesCommencees = false; 
-     coursesFinies = false;                              
-      fill_solid( leds, NUM_LEDS, CRGB::Green);  FastLED.show();
-      myDFPlayer.playMp3Folder(5); delay(3000);
-      FastLED.clear (); FastLED.show();
-      scores[joueurEnCours] = scores[joueurEnCours]+15+pointBonus15[joueurEnCours];
-      pointBonus15[joueurEnCours] = pointBonus15[joueurEnCours]+3;
-      resetAllBonus15();
-      // Envoi du message structuré pour le joueur
-      String message = "J" + String(joueurEnCours) + " : " + String(15) + " : " + String(pointBonus15[joueurEnCours]) + " : " + String(scores[joueurEnCours]);
-      Serial1.println(message);
-      Serial.println("📤 Envoi à ESP32: " + message);
-    }  
-
-    statusCible5 = digitalRead(cible5);
-    if (statusCible5 == LOW){
-      coursesCommencees = false; 
-      coursesFinies = false;
-      fill_solid(leds, NUM_LEDS, CRGB::Blue);  FastLED.show();
-      myDFPlayer.playMp3Folder(8); delay(3000);
-      FastLED.clear(); FastLED.show();
-      scores[joueurEnCours] = scores[joueurEnCours]+25+pointBonus25[joueurEnCours];
-      pointBonus25[joueurEnCours] = pointBonus25[joueurEnCours]+4;
-      resetAllBonus25();
-      // Envoi du message structuré pour le joueur
-      String message = "J" + String(joueurEnCours) + " : " + String(25) + " : " + String(pointBonus25[joueurEnCours]) + " : " + String(scores[joueurEnCours]);
-      Serial1.println(message);
-      Serial.println("📤 Envoi à ESP32: " + message);     
-    }   
-
-    statusCible6 = digitalRead(cible6);
-    if (statusCible6 == LOW){
-      coursesCommencees = false; 
-      coursesFinies = false;
-      Cinquante();               
-      scores[joueurEnCours] = scores[joueurEnCours]+50+pointBonus50[joueurEnCours];
-      pointBonus50[joueurEnCours] = pointBonus50[joueurEnCours]+5;
-      resetAllBonus50();
-      // Envoi du message structuré pour le joueur
-      String message = "J" + String(joueurEnCours) + " : " + String(50) + " : " + String(pointBonus50[joueurEnCours]) + " : " + String(scores[joueurEnCours]);
-      Serial1.println(message);
-      Serial.println("📤 Envoi à ESP32: " + message);
-    }
-
-    statusCible7 = digitalRead(cible7);
-    if (statusCible7 == LOW){
-      coursesCommencees = false; 
-      coursesFinies = false;
-      Cent();
-      scores[joueurEnCours] = scores[joueurEnCours]+100+pointBonus100[joueurEnCours];
-      pointBonus100[joueurEnCours] = pointBonus100[joueurEnCours]+10;
-      resetAllBonus100();
-      // Envoi du message structuré pour le joueur
-      String message = "J" + String(joueurEnCours) + " : " + String(100) + " : " + String(pointBonus100[joueurEnCours]) + " : " + String(scores[joueurEnCours]);
-      Serial1.println(message);
-      Serial.println("📤 Envoi à ESP32: " + message);
-    }
-
-    statusCible8 = digitalRead(cible8);
-    if (statusCible8 == LOW){
-      coursesCommencees = false; 
-      coursesFinies = false;
-      CentCinquante();
-      scores[joueurEnCours] = scores[joueurEnCours]+150+pointBonus150[joueurEnCours];
-      pointBonus150[joueurEnCours] = pointBonus150[joueurEnCours]+15;
-      resetAllBonus150();
-      // Envoi du message structuré pour le joueur
-      String message = "J" + String(joueurEnCours) + " : " + String(150) + " : " + String(pointBonus150[joueurEnCours]) + " : " + String(scores[joueurEnCours]);
-      Serial1.println(message);
-      Serial.println("📤 Envoi à ESP32: " + message);
-    }
-
-    statusCible9 = digitalRead(cible9);
-    if (statusCible9 == LOW){
-      coursesCommencees = false; 
-      coursesFinies = false;
-      DeuxCent();
-      scores[joueurEnCours] = scores[joueurEnCours]+200+pointBonus200[joueurEnCours];
-      pointBonus200[joueurEnCours] = pointBonus200[joueurEnCours]+20;
-      resetAllBonus200();
-      // Envoi du message structuré pour le joueur
-      String message = "J" + String(joueurEnCours) + " : " + String(200) + " : " + String(pointBonus200[joueurEnCours]) + " : " + String(scores[joueurEnCours]);
-      Serial1.println(message);
-      Serial.println("📤 Envoi à ESP32: " + message);
-    }
-
-    statusCible10 = digitalRead(cible10);
-    if (statusCible10 == LOW){
-      coursesCommencees = false; 
-      coursesFinies = false;
-      DeuxCentCinquante();
-      scores[joueurEnCours] = scores[joueurEnCours]+250+pointBonus250[joueurEnCours];
-      pointBonus250[joueurEnCours] = pointBonus250[joueurEnCours]+25;
-      resetAllBonus250();
-      // Envoi du message structuré pour le joueur
-      String message = "J" + String(joueurEnCours) + " : " + String(250) + " : " + String(pointBonus250[joueurEnCours]) + " : " + String(scores[joueurEnCours]);
-      Serial1.println(message);
-      Serial.println("📤 Envoi à ESP32: " + message);
-    }
-           
-    else {
-      killer[joueurEnCours] = 0;
+  void _updateBlinkingAnimation() {
+    final uiState = Provider.of<GameUIState>(context, listen: false);
+    final blinking = uiState.attenteGroupeBlinking || uiState.nextPlayerBlinking || uiState.nextTurnBlinking;
+    if (blinking) {
+      if (!_blinkController.isAnimating) {
+        _blinkController.repeat(reverse: true);
       }
-  SMRAZ();                 
-  GererInterruption();
-}
-
-void Penalite() { 
-  if (!coursesCommencees)
-  {
-    EcranEnJeu();
-    myDFPlayer.playMp3Folder(19);
-    lcd.setCursor(11,3);
-    lcd.print("TR: ");
-    coursesCommencees = true;
-//    Serial.println("coursesCommencees");
-    // Réinitialisation des couleurs et états
-    memset(colorIndexes, 0, sizeof(colorIndexes)); // Réinitialise tous les index de couleur
-    memset(lastColorChanges, 0, sizeof(lastColorChanges));
-    startTime = millis();
-    tempsGenere = false;  // ✅ Réinitialise l'état pour la prochaine manche
-  }
-  if(!coursesFinies && coursesCommencees) {
-    if (!tempsGenere) {
-      tempstotalF = 5;  // ⏳ Temps 5 secondes
-      Period1 = tempstotalF * 1000;
-      Period2 = tempstotalF * 1000;
-      tempsGenere = true;  // ✅ Marque que le temps a été généré
-      // ✅ Affichage immédiat du temps restant pour éviter qu'il ne soit manquant
-      lcd.setCursor(15,3);
-      lcd.print(tempstotalF);
-      // 🎨 Affichage du code couleur correspondant
-      if (tempstotalF == 1) fill_solid(leds, NUM_LEDS, CRGB::Red); // 🔴 Rouge
-      else if (tempstotalF >= 2 && tempstotalF <= 5) { 
-        int index = tempstotalF - 2;
-        fill_solid(leds, NUM_LEDS, colorArrays[index][colorIndexes[index]]); // 🟠 Orange <- 🟡 Jaune <- 🟢 Vert <- 🔵 Bleu ( Sens de décomptage )
-        lastColorChanges[index] = millis();
-      }
-      FastLED.show();
-      Moteur();  // ✅ Activation immédiate
-      // ✅ Démarre le délai non bloquant pour éteindre les LEDs après 1 seconde
-      ledsAllumeesMillis = millis();
-      ledsAllumees = true;
+    } else {
+      _blinkController.stop();
+      _blinkController.value = 1.0;
     }
-     // ✅ Éteindre les LEDs après 1 seconde sans bloquer le code
-     if (ledsAllumees && millis() - ledsAllumeesMillis >= 500) {
-      FastLED.clear(); FastLED.show(); // ⭕ Éteint les LEDs après 1 seconde
-      ledsAllumees = false;
-     }
-    // ✅ Changement de couleur toutes les secondes si tempstotalF entre 2 et 5
-    if (tempstotalF >= 2 && tempstotalF <= 5) {
-      int index = tempstotalF - 2;
-      if (millis() - lastColorChanges[index] >= 1000) {
-        colorIndexes[index] = (colorIndexes[index] + 1) % colorSizes[index];
-        fill_solid(leds, NUM_LEDS, colorArrays[index][colorIndexes[index]]); //  🔵 Bleu -> 🟢 Vert -> 🟡 Jaune -> 🟠 Orange ( Sens réel )
-        FastLED.show();
-        lastColorChanges[index] = millis();
-      }
+  }
+
+  void _onStartGamePressed() {
+    final ws = Provider.of<WebSocketService>(context, listen: false);
+    ws.sendMessage(json.encode({'type': 'game_status', 'message': 'START_GAME'}));
+    final uiState = Provider.of<GameUIState>(context, listen: false);
+    uiState.updateAttenteGroupe(
+      color: Colors.green,
+      enabled: false,
+      text: 'Partie lancée',
+      blinking: false,
+      disabledColor: Colors.green,
+    );
+    _updateBlinkingAnimation();
+  }
+
+  void _onNextPlayerPressed() {
+    final ws = Provider.of<WebSocketService>(context, listen: false);
+    ws.sendMessage(json.encode({'type': 'game_status', 'message': 'VALID_E'}));
+    final uiState = Provider.of<GameUIState>(context, listen: false);
+    uiState.updateNextPlayer(
+      enabled: false,
+      color: Colors.green,
+      blinking: false,
+    );
+    uiState.updateNextTurn(
+      enabled: false,
+      color: Colors.green,
+      blinking: false,
+    );
+    _updateBlinkingAnimation();
+  }
+
+  void _onNextTurnPressed() {
+    final ws = Provider.of<WebSocketService>(context, listen: false);
+    ws.sendMessage(json.encode({'type': 'game_status', 'message': 'VALID_E'}));
+    final uiState = Provider.of<GameUIState>(context, listen: false);
+    uiState.updateNextPlayer(
+      enabled: false,
+      color: Colors.green,
+      blinking: false,
+    );
+    uiState.updateNextTurn(
+      enabled: false,
+      color: Colors.green,
+      blinking: false,
+    );
+    _updateBlinkingAnimation();
+  }
+
+  void _showFinGameOverlay() async {
+    if (!mounted) return;
+
+    setState(() => showFinGameOverlay = true);
+    _overlayController.forward();
+
+    await Future.delayed(const Duration(seconds: 5));
+    if (!mounted) return;
+    _overlayController.reverse();
+
+    await Future.delayed(const Duration(milliseconds: 500));
+    if (mounted && !hasNavigatedToClassement) {
+      hasNavigatedToClassement = true;
+
+      final scoresMap = Provider.of<WebSocketService>(context, listen: false).scoresNotifier.value;
+      final finalScores = List.generate(4, (i) => scoresMap[i] ?? 0);
+
+      setState(() => showFinGameOverlay = false);
+
+      Provider.of<WebSocketService>(context, listen: false).showSaveButton.value = true;
+
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => ClassementScreen(finalScores: finalScores),
+        ),
+      );
     }
-     // ⏳ Temps écoulé, on passe au joueur/tour suivant
-     lcd.setCursor(15,3);
-     tempsrestant = tempstotalF - ( millis() - startTime) / 1000;
-     if(tempsrestant < 0)
-     {
-      coursesFinies = true;
-//      Serial.println("coursesFinies");
-      SMRAZTP();
-      lcd.clear();
-      clignotementLED(1);
-      lcd.setCursor(3, 1);
-      lcd.print("Temps ecoule !");
-      clignotementLED(1);
-      myDFPlayer.playMp3Folder(1);
-      clignotementLED(1);
-      Messages();
-      clignotementLED(1);
-      fill_solid(leds, NUM_LEDS, CRGB::Red);  FastLED.show();
-      delay(2000);
-      lcd.clear();
-      FastLED.clear(); FastLED.show();
-      coursesCommencees = false;
-      coursesFinies = false;
-      // Remise à zéro des autres bonus
-      resetAllBonus0();  // Appel à la fonction de réinitialisation
-      SMRAZ();
-      EcranEnJeu();
-      GererInterruption();  // 🔄 Passe au joueur suivant immédiatement  
-     }
-     else lcd.print(tempsrestant);
-//     Serial.println("tempsrestant");
-    }         
-}
-
-void GererInterruption(){
-  Serial.println("GererInterruption - Debut");
-
-  Serial.print("joueurEnCours: "); Serial.println(joueurEnCours);
-  Serial.print("tourEnCours: "); Serial.println(tourEnCours);
-  Serial.print("resteEnCours: "); Serial.println(resteEnCours);
-  Serial.print("nbJoueurs: "); Serial.println(nbJoueurs);
-  Serial.print("nbTours: "); Serial.println(nbTours);
-
-  if ( joueurEnCours == nbJoueurs && tourEnCours == nbTours && resteEnCours == 1 ){
-    Serial.println("GererInterruption - Fin de partie");
-    testKiller();
-    coursesCommencees = false;
-    coursesFinies = false;
-    partieEnCours = false;
-    partieFinie = true;
-    SMRAZ();
   }
-  else if (  joueurEnCours == nbJoueurs && resteEnCours == 1 )
-  {
-    Serial.println("GererInterruption - Nouveau tour");
-    myDFPlayer.stop();
-    testKiller();
-    joueurEnCours = 1;           
-    resteEnCours = 3;
-    tourEnCours++;
-    Serial.print("Nouveau tourEnCours: "); Serial.println(tourEnCours); // Log
-    EcranTourSuivant();    
-    myDFPlayer.playMp3Folder(30);   
-    EcranJoueurSuivant();  
-    lcd.clear();
 
-   // Lecture de l'état du bouton E AVANT d'entrer dans la boucle
-   bool boutonEEtat = digitalRead(boutonE) == HIGH;
-   while (boutonEEtat){
-        AcquisitionCapteurs();        
-        printBigNum(21, 13, 0);
-        printBigNum(joueurEnCours,17,0);
-        lcd.setCursor(0,0);
-        lcd.print("Tour  : "+ String(tourEnCours));
-        lcd.setCursor(0,2);
-        lcd.print("Quand pret");         
-        lcd.setCursor(8,3);
-        lcd.print("Start --> OK");
-        FastLED.clear(); FastLED.show();
+  @override
+  Widget build(BuildContext context) {
+    final ws = Provider.of<WebSocketService>(context);
+    final groupModel = Provider.of<GroupModel>(context);
+    final uiState = Provider.of<GameUIState>(context);
 
-        delay(1); // Ajout d'un délai minimal
+    _updateBlinkingAnimation();
 
-        // Relecture de l'état du bouton E à chaque itération
-        boutonEEtat = digitalRead(boutonE) == HIGH;                   
-   }
-   EcranGo();
-   Serial.println("GO_TS");                   
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        title: const Row(
+          children: [
+            Icon(Icons.bar_chart, color: Colors.white),
+            SizedBox(width: 8),
+            Text('Scores', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: ElevatedButton(
+              onPressed: null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF7DBFF8),
+                disabledBackgroundColor: const Color(0xFF7DBFF8),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+              child: Text(
+                'Groupe ${groupModel.selectedGroup}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black,
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: FadeTransition(
+              opacity: uiState.attenteGroupeBlinking
+                  ? Tween<double>(begin: 1.0, end: 0.0).animate(_blinkController)
+                  : const AlwaysStoppedAnimation(1.0),
+              child: ElevatedButton(
+                onPressed: uiState.attenteGroupeEnabled ? _onStartGamePressed : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: uiState.attenteGroupeColor,
+                  disabledBackgroundColor: uiState.attenteGroupeDisabledColor,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+                child: Text(
+                  uiState.attenteGroupeText,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (uiState.attenteGroupeText != "Attente groupe") ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: FadeTransition(
+                opacity: uiState.nextPlayerBlinking
+                    ? Tween<double>(begin: 1.0, end: 0.0).animate(_blinkController)
+                    : const AlwaysStoppedAnimation(1.0),
+                child: ElevatedButton(
+                  onPressed: uiState.nextPlayerEnabled ? _onNextPlayerPressed : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: uiState.nextPlayerColor,
+                    disabledBackgroundColor: Colors.blue,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                  ),
+                  child: const Text(
+                    'Joueur suivant',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: FadeTransition(
+                opacity: uiState.nextTurnBlinking
+                    ? Tween<double>(begin: 1.0, end: 0.0).animate(_blinkController)
+                    : const AlwaysStoppedAnimation(1.0),
+                child: ElevatedButton(
+                  onPressed: uiState.nextTurnEnabled ? _onNextTurnPressed : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: uiState.nextTurnColor,
+                    disabledBackgroundColor: Colors.blue,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                  ),
+                  child: const Text(
+                    'Tour suivant',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final double spacing = constraints.maxWidth * 0.02;
+            final double usableHeight = constraints.maxHeight - spacing * 3;
+            final double cardHeight = (usableHeight / 2) - spacing;
+            final double cardWidth = (constraints.maxWidth - spacing * 3) / 2;
+            final double fontSize = cardHeight * 0.4;
+
+            return FadeTransition(
+              opacity: _fadeAnimation,
+              child: ScaleTransition(
+                scale: _scaleAnimation,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    ValueListenableBuilder<Map<int, String>>(
+                      valueListenable: ws.pseudonymsNotifier,
+                      builder: (context, pseudos, _) {
+                        return ValueListenableBuilder<Map<int, int>>(
+                          valueListenable: ws.scoresNotifier,
+                          builder: (context, scores, _) {
+                            return Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    _buildScoreCard(
+                                      '${pseudos[0] ?? "J1"} : ${scores[0] ?? 0}',
+                                      cardWidth,
+                                      cardHeight,
+                                      fontSize,
+                                      const LinearGradient(
+                                        colors: [Color(0xFFAEDCFA), Color(0xFF91C9F9)],
+                                      ),
+                                    ),
+                                    SizedBox(width: spacing),
+                                    _buildScoreCard(
+                                      '${pseudos[1] ?? "J2"} : ${scores[1] ?? 0}',
+                                      cardWidth,
+                                      cardHeight,
+                                      fontSize,
+                                      const LinearGradient(
+                                        colors: [Color(0xFF91C9F9), Color(0xFF6AB8F7)],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(height: spacing),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    _buildScoreCard(
+                                      '${pseudos[2] ?? "J3"} : ${scores[2] ?? 0}',
+                                      cardWidth,
+                                      cardHeight,
+                                      fontSize,
+                                      const LinearGradient(
+                                        colors: [Color(0xFF6AB8F7), Color(0xFF429CF2)],
+                                      ),
+                                    ),
+                                    SizedBox(width: spacing),
+                                    _buildScoreCard(
+                                      '${pseudos[3] ?? "J4"} : ${scores[3] ?? 0}',
+                                      cardWidth,
+                                      cardHeight,
+                                      fontSize,
+                                      const LinearGradient(
+                                        colors: [Color(0xFF429CF2), Color(0xFF1E88E5)],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            );
+                          },
+                        );
+                      },
+                    ),
+                    if (showFinGameOverlay)
+                      FadeTransition(
+                        opacity: _overlayController,
+                        child: Container(
+                          width: constraints.maxWidth * 0.75,
+                          height: constraints.maxHeight * 0.75,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFFFE0B2), Color(0xFFFFB74D)],
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          alignment: Alignment.center,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'FIN GAME',
+                              style: TextStyle(
+                                fontSize: constraints.maxHeight * 0.15,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
   }
-  else if ( resteEnCours != 1 ){
-    Serial.println("GererInterruption - Reste en cours");
-    resteEnCours--; 
-  }  
-  else
-  {      
-    Serial.println("GererInterruption - Nouveau joueur");
-    testKiller();
-    joueurEnCours++;
-    resteEnCours = 3;
-    EcranJoueurSuivant();   
-    myDFPlayer.playMp3Folder(30);
-    myDFPlayer.playMp3Folder(23);   
-    lcd.clear();
 
-    // Lecture de l'état du bouton E AVANT d'entrer dans la boucle
-    bool boutonEEtat = digitalRead(boutonE) == HIGH;
-    while (boutonEEtat){
-        AcquisitionCapteurs();             
-        printBigNum(21, 13, 0);
-        printBigNum(joueurEnCours,17,0);
-        lcd.setCursor(0,0);
-        lcd.print("Tour  : "+ String(tourEnCours));
-        lcd.setCursor(0,2);
-        lcd.print("Quand pret");        
-        lcd.setCursor(8,3);
-        lcd.print("Start --> OK");
-        FastLED.clear(); FastLED.show();
-
-        delay(1); // Ajout d'un délai minimal
-
-        // Relecture de l'état du bouton E à chaque itération
-        boutonEEtat = digitalRead(boutonE) == HIGH;                        
-   }
-   EcranGo();
-   Serial.println("GO_JS");    
+  Widget _buildScoreCard(String text, double width, double height, double fontSize, LinearGradient gradient) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        gradient: gradient,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: fontSize,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+        textAlign: TextAlign.center,
+      ),
+    );
   }
-  Serial.println("GererInterruption - Fin");
-}
 
-void EcranInitialisation(){
-  lcd.clear();
-  lcd.setCursor(0,0);
-  lcd.print(F("Classic - Facile"));
-  lcd.setCursor(0,1);
-  lcd.print("Nb joueurs : " + String(nbJoueurs) + "      ");       
-}
-
-void InitGame(){
-  FastLED.clear(); FastLED.show();
-  myDFPlayer.stop();
-  myDFPlayer.playMp3Folder(19);
-  tourEnCours = 1;
-  joueurEnCours = 1;
-  resteEnCours = 3;
-  for(int i=1; i<=4; i++){
-    scores[i] = 0;
-    killer[1] = 0;
-    levels[1] = 0;
-    oldClassement[1] = 0;
-    classement[1] = 0;
+  @override
+  void dispose() {
+    _controller.dispose();
+    _overlayController.dispose();
+    _blinkController.dispose();
+    _messageSubscription?.cancel();
+    super.dispose();
   }
-  statusBoutonE = digitalRead(boutonE);   
-    if (nbJoueurs == 1){
-       nbJoueurs = 1;
-    }
-    if (nbJoueurs != oldNbJoueurs){
-      oldNbJoueurs=nbJoueurs;
-    }
-    initialisation = false;
-    partieEnCours = true;
-    EcranEnJeu();
-    EcranGo();
-    Serial.println("GO_Partie");
-//    Serial1.println("GO");
-//    Serial.println("📤 Envoi à ESP32: GO");
 }
-
-// ----------------------------------------------------------------------------------------------
-// ----------------AFFICHAGE FIN DE PARTIE
-// ----------------------------------------------------------------------------------------------
