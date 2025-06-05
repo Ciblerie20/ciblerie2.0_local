@@ -171,6 +171,12 @@ class DevScreen extends StatelessWidget {
       'message': group // Ex: "CF1"
     }));
 
+    // 1b. Envoi du bouton virtuel "OK" à l'Arduino via ESP32
+    ws.sendMessage(json.encode({
+      'type': 'game_status',
+      'message': 'BOUTON_E_VIRTUEL'
+    }));
+
     // 2. Sauvegarde du groupe sélectionné
     groupModel.setSelectedGroup(group);
 
