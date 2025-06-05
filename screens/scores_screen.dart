@@ -101,8 +101,13 @@ class _ScoresScreenState extends State<ScoresScreen> with TickerProviderStateMix
             color: Colors.green,
             blinking: false,
           );
+          uiState.updateAttenteGroupe(
+            color: Colors.green,
+            enabled: false,
+            text: 'Partie lancée',
+            blinking: false,
+          );
         }
-        // Activation du bouton "Joueur suivant" sur réception du bon message
         if (wsMessage == 'NEXT_PLAYER') {
           uiState.updateNextPlayer(
             enabled: true,
@@ -112,6 +117,12 @@ class _ScoresScreenState extends State<ScoresScreen> with TickerProviderStateMix
           uiState.updateNextTurn(
             enabled: false,
             color: Colors.green,
+            blinking: false,
+          );
+          uiState.updateAttenteGroupe(
+            color: Colors.green,
+            enabled: false,
+            text: 'Partie lancée',
             blinking: false,
           );
         }
@@ -171,7 +182,7 @@ class _ScoresScreenState extends State<ScoresScreen> with TickerProviderStateMix
 
   void _onNextPlayerPressed() {
     final ws = Provider.of<WebSocketService>(context, listen: false);
-    ws.sendMessage(json.encode({'type': 'next_player', 'message': 'NEXT_PLAYER'}));
+    ws.sendMessage(json.encode({'type': 'game_status', 'message': 'VALID_E'}));
     final uiState = Provider.of<GameUIState>(context, listen: false);
     uiState.updateNextPlayer(
       enabled: false,
@@ -188,7 +199,7 @@ class _ScoresScreenState extends State<ScoresScreen> with TickerProviderStateMix
 
   void _onNextTurnPressed() {
     final ws = Provider.of<WebSocketService>(context, listen: false);
-    ws.sendMessage(json.encode({'type': 'game_status', 'message': 'NEXT_TURN'}));
+    ws.sendMessage(json.encode({'type': 'game_status', 'message': 'VALID_E'}));
     final uiState = Provider.of<GameUIState>(context, listen: false);
     uiState.updateNextPlayer(
       enabled: false,
@@ -221,6 +232,8 @@ class _ScoresScreenState extends State<ScoresScreen> with TickerProviderStateMix
       final finalScores = List.generate(4, (i) => scoresMap[i] ?? 0);
 
       setState(() => showFinGameOverlay = false);
+
+      Provider.of<WebSocketService>(context, listen: false).showSaveButton.value = true;
 
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
