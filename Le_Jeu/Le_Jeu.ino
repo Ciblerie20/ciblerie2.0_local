@@ -1,7 +1,7 @@
 
 // Le 02.05.22 à 8h "OK" le 10.09.22 à 17h50 sur le bureau
 // Original à modifier si les test son OK sur celui des TEST
-// Ok le 16.04.25 à 19h - Code 100% fonctionnel
+// Ok le 05.06.25 à 19h - Code 100% fonctionnel
 
 // Mode ARCADE + ESP32 = ici c'est = Arduino méga
 
@@ -316,6 +316,10 @@ bool coursesCommencees = false;
 bool coursesFinies = false;
 bool debugMode=false;
 int delaiTemporisation = 100;
+
+// Déclaration globale à mettre en haut du fichier :
+volatile bool goRecu = false;
+volatile bool boutonVirtuelE = false;
 
 float startTime;
 
