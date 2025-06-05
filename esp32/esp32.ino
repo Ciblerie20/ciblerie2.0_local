@@ -160,6 +160,25 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
         Serial1.println("START_GAME");
         Serial.println("📨 Envoi à Arduino: START_GAME");
 
+      } else if (type == "game_status" && msg == "NEXT_PLAYER") {
+        Serial1.println("NEXT_PLAYER");
+        Serial.println("📨 Envoi à Arduino: NEXT_PLAYER");
+
+      } else if (type == "game_status" && msg == "NEXT_TURN") {
+        Serial1.println("NEXT_TURN");
+        Serial.println("📨 Envoi à Arduino: NEXT_TURN");
+      
+      } else if (type == "game_status" && msg == "GO") {
+        Serial1.println("GO");
+        Serial.println("📨 Envoi à Arduino: GO");
+      
+      } else if (type == "game_status" && msg == "VALID_E") {
+        Serial1.println("VALID_E");
+        Serial.println("📨 Envoi à Arduino: VALID_E"); 
+      
+      } else if (type == "game_status" && msg == "BOUTON_E_VIRTUEL") {
+        Serial1.println("BOUTON_E_VIRTUEL");
+        Serial.println("📨 Envoi à Arduino: BOUTON_E_VIRTUEL");
       }
       break;
     }
@@ -185,10 +204,23 @@ void processIncomingSerialData() {
     Serial.println("📥 Message reçu de l'Arduino: " + incomingData);
 
     if (incomingData.startsWith("J")) {
-      handleScoreData(incomingData.substring(1)); // Enlever le J ici aussi
+      handleScoreData(incomingData.substring(1));
+    
     } else if (incomingData == "START") {
       sendGameStatus("START");
       currentGameState = WAITING_CONFIRMATION;
+
+    } else if (incomingData == "NEXT_PLAYER") {
+      sendGameStatus("NEXT_PLAYER");
+
+    } else if (incomingData == "NEXT_TURN") {
+      sendGameStatus("NEXT_TURN");
+      
+    } else if (incomingData == "GO") {
+      sendGameStatus("GO");
+
+    } else if (incomingData == "FIN_GAME") {
+      sendGameStatus("FIN_GAME"); 
     }
   }
 }
@@ -206,7 +238,7 @@ void handleScoreData(const String& data) {
 
   // Création du nouveau document JSON
   StaticJsonDocument<256> outputDoc;
-  outputDoc["playerIndex"] = playerIndex -1;
+  outputDoc["playerIndex"] = playerIndex;
   outputDoc["points"] = points;
   outputDoc["pointsbonus"] = pointsbonus;
   outputDoc["score"] = score;
