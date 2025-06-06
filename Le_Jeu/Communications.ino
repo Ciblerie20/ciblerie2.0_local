@@ -1,12 +1,10 @@
 
 // 📨 📥
-
 void envoyerMessage(String message) {
   Serial1.println(message);
   Serial.print("📨 Message envoyé à ESP32 : ");
   Serial.println(message);
 }
-
 
 void communications() {
   if (Serial1.available() > 0) {
@@ -85,8 +83,10 @@ void communications() {
       partieDemarree = true;
       groupeSelectionne = ""; // Réinitialiser la variable groupeSelectionne
     } 
-    else if (strcmp(messageRecu, "NEXT_PLAYER") == 0 && partieDemarree) {
-      Serial.println("📥 Message reçu de l'ESP32 : NEXT_PLAYER");
+    // 3. Gestion Joueur suivant et Tour suivant (identique)
+    else if ((strcmp(messageRecu, "NEXT_PLAYER") == 0 || strcmp(messageRecu, "NEXT_TURN") == 0) && partieDemarree) {
+      Serial.print("📥 Message reçu de l'ESP32 : ");
+      Serial.println(messageRecu);
       Serial1.println("GO");
       Serial.print("📨 Message envoyé à ESP32 : ");
       Serial.println("GO");
