@@ -230,15 +230,3 @@ Toutes les données et les déroulemnts sont dans "CF1", "regles", "scores".
 Tu as tout ce que je souhaite faire depuis avec mon application "Flutter",
 En faite c'est de tout lancer de mon application "Flutter",
 Au lieu ou en plus de mon jeu déjà existant sur mon "Arduino Méga" avec mes "LCD" et "Boutons".
-
-Dans les messages suivant je vais de mettre mes codes dans cette ordre là :
-Tu vas les analysés afin de bien pouvoir les faire communiquer ensemble ,
-Car j ai des problème avec cela ,
-Je te les mets un par un dans des messages séparés donc tu auras 7 codes à recevoir ,
-Et ensuite je te dirai quoi faire :
-
-"arduino méga" qui lui sera composé de 3 codes : "CF1" , "regles" , "scores"
-"esp32"
-"websocket_screen"
-"dev_screen"
-"scores_screen"
